@@ -1,4 +1,3 @@
-
 /******************************************************************************
 * File Name: main.c
 *
@@ -15,25 +14,27 @@
 *  On next reboot, Bootloader will copy the new image over to the primary slot
 *  and run the new application.
 *
-* Related Document: See Readme.md
+* Related Document: See README.md
+*
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
-*******************************************************************************
-* This software, including source code, documentation and related materials
-* ("Software"), is owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide patent
-* protection (United States and foreign), United States copyright laws and
-* international treaty provisions. Therefore, you may use this Software only
-* as provided in the license agreement accompanying the software package from
-* which you obtained this Software ("EULA").
+* Copyright 2021, Cypress Semiconductor Corporation (an Infineon company) or
+* an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
+* This software, including source code, documentation and related
+* materials ("Software") is owned by Cypress Semiconductor Corporation
+* or one of its affiliates ("Cypress") and is protected by and subject to
+* worldwide patent protection (United States and foreign),
+* United States copyright laws and international treaty provisions.
+* Therefore, you may use this Software only as provided in the license
+* agreement accompanying the software package from which you
+* obtained this Software ("EULA").
 * If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
-* non-transferable license to copy, modify, and compile the Software source
-* code solely for use in connection with Cypress's integrated circuit products.
-* Any reproduction, modification, translation, compilation, or representation
-* of this Software except as specified above is prohibited without the express
-* written permission of Cypress.
+* non-transferable license to copy, modify, and compile the Software
+* source code solely for use in connection with Cypress's
+* integrated circuit products.  Any reproduction, modification, translation,
+* compilation, or representation of this Software except as specified
+* above is prohibited without the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
 * EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
@@ -44,9 +45,9 @@
 * not authorize its products for use in any products where a malfunction or
 * failure of the Cypress product may reasonably be expected to result in
 * significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer of such
-* system or application assumes all risk of such use and in doing so agrees to
-* indemnify Cypress against all liability.
+* including Cypress's product in a High Risk Product, the manufacturer
+* of such system or application assumes all risk of such use and in doing
+* so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
 /* Header file includes */
@@ -55,6 +56,9 @@
 #include "cy_retarget_io.h"
 #include "state_mgr.h"
 
+#ifdef DEBUG_PRINT
+#include "cy_log.h"
+#endif
 /* FreeRTOS header file */
 #include <FreeRTOS.h>
 #include <task.h>
@@ -82,6 +86,7 @@ volatile int uxTopUsedPriority;
 int main(void)
 {
     cy_rslt_t result = CY_RSLT_SUCCESS;
+    cyhal_wdt_t wdt_obj;
 
     /* This enables RTOS aware debugging in OpenOCD */
     uxTopUsedPriority = configMAX_PRIORITIES - 1 ;
@@ -101,10 +106,21 @@ int main(void)
     /* Enable global interrupts. */
     __enable_irq();
 
+#ifdef DEBUG_PRINT
+    /* default for all loggings */
+    cy_log_init(CY_LOG_DEBUG, NULL, NULL);
+#endif
+
     printf("===============================================================\n");
     printf("factory_app_cm4 version: %d.%d.%d\n",
             APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD);
     printf("===============================================================\n\n");
+
+    /* Clear watchdog timer so that it doesn't trigger a reset */
+    cyhal_wdt_init(&wdt_obj, cyhal_wdt_get_max_timeout_ms());
+    cyhal_wdt_free(&wdt_obj);
+
+    printf("\nWatchdog timer started by the bootloader is now turned off!!!\n\n");
 
     /* initialize the state manager */
     state_mgr_task_init();

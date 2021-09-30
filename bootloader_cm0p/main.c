@@ -8,22 +8,23 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
-*******************************************************************************
-* This software, including source code, documentation and related materials
-* ("Software"), is owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide patent
-* protection (United States and foreign), United States copyright laws and
-* international treaty provisions. Therefore, you may use this Software only
-* as provided in the license agreement accompanying the software package from
-* which you obtained this Software ("EULA").
+* Copyright 2021, Cypress Semiconductor Corporation (an Infineon company) or
+* an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
+* This software, including source code, documentation and related
+* materials ("Software") is owned by Cypress Semiconductor Corporation
+* or one of its affiliates ("Cypress") and is protected by and subject to
+* worldwide patent protection (United States and foreign),
+* United States copyright laws and international treaty provisions.
+* Therefore, you may use this Software only as provided in the license
+* agreement accompanying the software package from which you
+* obtained this Software ("EULA").
 * If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
-* non-transferable license to copy, modify, and compile the Software source
-* code solely for use in connection with Cypress's integrated circuit products.
-* Any reproduction, modification, translation, compilation, or representation
-* of this Software except as specified above is prohibited without the express
-* written permission of Cypress.
+* non-transferable license to copy, modify, and compile the Software
+* source code solely for use in connection with Cypress's
+* integrated circuit products.  Any reproduction, modification, translation,
+* compilation, or representation of this Software except as specified
+* above is prohibited without the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
 * EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
@@ -34,9 +35,9 @@
 * not authorize its products for use in any products where a malfunction or
 * failure of the Cypress product may reasonably be expected to result in
 * significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer of such
-* system or application assumes all risk of such use and in doing so agrees to
-* indemnify Cypress against all liability.
+* including Cypress's product in a High Risk Product, the manufacturer
+* of such system or application assumes all risk of such use and in doing
+* so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
 /* standard headers */
@@ -48,6 +49,13 @@
 #include "cy_result.h"
 #include "cy_retarget_io_pdl.h"
 
+#include "cycfg_clocks.h"
+#include "cycfg_peripherals.h"
+#include "cycfg_pins.h"
+
+/* Flash PAL header files */
+#include "flash_qspi.h"
+
 /* MCUboot header files */
 #include "bootutil/image.h"
 #include "bootutil/bootutil.h"
@@ -58,6 +66,7 @@
 #include "flash_map_backend/flash_map_backend.h"
 #include "cy_smif_psoc6.h"
 #include "sysflash.h"
+#include "watchdog.h"
 
 /*******************************************************************************
 * Macros
@@ -80,6 +89,15 @@
  */
 #define USER_BTN_PRESSED        (0)
 
+/* here, In this code example MCUBOOT_IMAGE_NUMBER=1
+ * MCUBOOT_IMAGE_1_INDEX value is always 0.
+ * This defines can be useful, when MCUBOOT_IMAGE_NUMBER > 1.
+ */
+#define MCUBOOT_IMAGE_1_INDEX   (0)
+
+/* WDT time out for reset mode, in milliseconds. */
+#define WDT_TIME_OUT_MS         (4000UL)
+
 /* user button interrupt configurations  */
 static cy_stc_sysint_t user_btn_isr_cfg =
 {
@@ -100,6 +118,7 @@ static cy_rslt_t transfer_factory_image(void);
 static void do_boot(struct boot_rsp *rsp, char *msg);
 static void rollback_to_factory_image(void);
 static void user_button_isr(void);
+static void deinit_hw(void);
 
 /******************************************************************************
  * Function Name: user_button_isr
@@ -143,32 +162,18 @@ static cy_rslt_t transfer_factory_image(void)
     uint32_t index = 0 , bytes_to_copy = 0 , prim_slot_off = 0, fact_img_off = 0 ;
     uint32_t image_magic = 0 ;
 
-    /* Initialize QSPI NOR flash using SFDP. */
-    result = qspi_init_sfdp(QSPI_SLAVE_SELECT_LINE);
-    if( result == CY_RSLT_SUCCESS)
-    {
-        BOOT_LOG_INF("External Memory initialization using SFDP mode.");
+    /* factory app area is in external flash.
+     * Flash map doesn't have any flash_area entry for the factory app
+     * To be compatible with MCUboot smif wrappers, populate a dummy flash_area
+     * structure with necessary details.
+     * Note: For read operation, only "fa_device_id" is sufficient.
+     * Populating only that for now.
+     */
+    fap_extf.fa_device_id = FLASH_DEVICE_EXTERNAL_FLASH(
+            CY_BOOT_EXTERNAL_DEVICE_INDEX);
 
-        /* Open primary slot */
-        result = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(0), &fap_primary);
-
-        /* factory app area is in external flash.
-         * Flash map doesn't have any flash_area entry for the factory app
-         * To be compatible with MCUboot smif wrappers, populate a dummy flash_area
-         * structure with necessary details.
-         * Note: For read operation, only "fa_device_id" is sufficient.
-         * Populating only that for now.
-         */
-        fap_extf.fa_device_id = FLASH_DEVICE_EXTERNAL_FLASH(
-                CY_BOOT_EXTERNAL_DEVICE_INDEX);
-    }
-    else
-    {
-        BOOT_LOG_ERR("External Memory initialization using SFDP Failed 0x%08x", (int)result);
-
-        /* critical error: asserting */
-        CY_ASSERT(0);
-    }
+    /* Open primary slot */
+    result = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(MCUBOOT_IMAGE_1_INDEX), &fap_primary);
 
     if(result != CY_RSLT_SUCCESS)
     {
@@ -296,13 +301,11 @@ static void do_boot(struct boot_rsp *rsp, char *msg)
 
     BOOT_LOG_INF("Starting %s on CM4. Please wait...", msg);
 
-    Cy_SysLib_Delay(CM4_BOOT_DELAY_MS);
-    Cy_SysEnableCM4(app_addr);
+    cy_retarget_io_wait_tx_complete(CYBSP_UART_HW, CM4_BOOT_DELAY_MS);
 
-    while (true)
-    {
-        __WFI();
-    }
+    deinit_hw();
+
+    Cy_SysEnableCM4(app_addr);
 }
 
 /******************************************************************************
@@ -344,6 +347,23 @@ static void rollback_to_factory_image(void)
 }
 
 /******************************************************************************
+ * Function Name: deinit_hw
+ ******************************************************************************
+ * Summary:
+ *  This function performs the necessary hardware de-initialization.
+ *
+ ******************************************************************************/
+static void deinit_hw(void)
+{
+    cy_retarget_io_pdl_deinit();
+
+    Cy_GPIO_Port_Deinit(CYBSP_UART_RX_PORT);
+    Cy_GPIO_Port_Deinit(CYBSP_UART_TX_PORT);
+
+    qspi_deinit(QSPI_SLAVE_SELECT_LINE);
+}
+
+/******************************************************************************
  * Function Name: main
  ******************************************************************************
  * Summary:
@@ -354,21 +374,48 @@ static void rollback_to_factory_image(void)
  ******************************************************************************/
 int main(void)
 {
+    cy_rslt_t result = CY_RSLT_SUCCESS;
     struct boot_rsp rsp;
     
-    /* Initialize system resources and peripherals. 
-     * Do not call init_cycfg_system() as the system clocks and resources will
-     * be initialized by CM4. 
+    /* Initialize system resources and peripherals. */
+    init_cycfg_all();
+
+    /* Certain PSoC 6 devices enable CM4 by default at startup. It must be 
+     * either disabled or enabled & running a valid application for flash write
+     * to work from CM0+. Since flash write may happen in boot_go() for updating
+     * the image before this bootloader app can enable CM4 in do_boot(), we need
+     * to keep CM4 disabled. Note that debugging of CM4 is not supported when it
+     * is disabled.
      */
-    init_cycfg_clocks();
-    init_cycfg_peripherals();
-    init_cycfg_pins();
+    #if defined(CY_DEVICE_PSOC6ABLE2)
+    if (CY_SYS_CM4_STATUS_ENABLED == Cy_SysGetCM4Status())
+    {
+        Cy_SysDisableCM4();
+    }
+    #endif /* #if defined(CY_DEVICE_PSOC6ABLE2) */
 
     /* Initialize retarget-io to redirect the printf output */
     cy_retarget_io_pdl_init(CY_RETARGET_IO_BAUDRATE);
 
     /* Enable interrupts */
     __enable_irq();
+
+    BOOT_LOG_INF("\x1b[2J\x1b[;H");
+    BOOT_LOG_INF("MCUboot Bootloader Started");
+
+    /* Initialize QSPI NOR flash using SFDP. */
+    result = qspi_init_sfdp(QSPI_SLAVE_SELECT_LINE);
+    if( result == CY_RSLT_SUCCESS)
+    {
+        BOOT_LOG_INF("External Memory initialization using SFDP mode.");
+    }
+    else
+    {
+        BOOT_LOG_ERR("External Memory initialization using SFDP Failed 0x%08x", (int)result);
+
+        /* critical error: asserting */
+        CY_ASSERT(0);
+    }
 
     /* perform upgrade if pending and check primary slot is valid or not
      */
@@ -393,6 +440,7 @@ int main(void)
         /* User button is not pressed at this point !
          * Boot to application
          */
+        cy_wdg_init(WDT_TIME_OUT_MS);
         do_boot(&rsp, "Application");
     }
     else

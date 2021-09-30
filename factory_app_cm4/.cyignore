@@ -1,1 +1,4 @@
-libs/mcuboot
+$(SEARCH_bluetooth-freertos)
+$(SEARCH_btstack)
+$(SEARCH_mcuboot)
+$(SEARCH_http-client)

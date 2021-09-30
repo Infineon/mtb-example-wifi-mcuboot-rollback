@@ -8,15 +8,15 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2020 Cypress Semiconductor Corporation
+# Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
-#
+# 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+# 
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +24,8 @@
 # limitations under the License.
 ################################################################################
 
-MCUBOOT_PATH=libs/mcuboot
+
+MCUBOOT_PATH=$(SEARCH_mcuboot)
 
 ################################################################################
 # MBEDTLS Files
@@ -65,9 +66,9 @@ SOURCES+=\
     $(wildcard $(MCUBOOT_CY_PATH)/cy_flash_pal/flash_qspi/*.c)\
     $(MCUBOOTAPP_PATH)/cy_security_cnt.c\
     $(MCUBOOT_CY_PATH)/platforms/retarget_io_pdl/cy_retarget_io_pdl.c\
-    $(MCUBOOTAPP_PATH)/image_ec256_mbedtls.c\
     $(MCUBOOTAPP_PATH)/keys.c\
-
+    $(MCUBOOT_CY_PATH)/libs/watchdog/watchdog.c
+    
 INCLUDES+=\
     ./keys\
     $(MCUBOOT_PATH)/boot/bootutil/include\
@@ -80,4 +81,5 @@ INCLUDES+=\
     $(MCUBOOTAPP_PATH)/sysflash\
     $(MCUBOOTAPP_PATH)/os\
     $(MCUBOOTAPP_PATH)/config\
-    $(MCUBOOTAPP_PATH)/config/mcuboot_config
+    $(MCUBOOTAPP_PATH)/config/mcuboot_config\
+    $(MCUBOOT_CY_PATH)/libs/watchdog

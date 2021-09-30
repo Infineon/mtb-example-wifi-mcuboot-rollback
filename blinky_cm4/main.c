@@ -8,22 +8,23 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
-*******************************************************************************
-* This software, including source code, documentation and related materials
-* ("Software"), is owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide patent
-* protection (United States and foreign), United States copyright laws and
-* international treaty provisions. Therefore, you may use this Software only
-* as provided in the license agreement accompanying the software package from
-* which you obtained this Software ("EULA").
+* Copyright 2021, Cypress Semiconductor Corporation (an Infineon company) or
+* an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
+* This software, including source code, documentation and related
+* materials ("Software") is owned by Cypress Semiconductor Corporation
+* or one of its affiliates ("Cypress") and is protected by and subject to
+* worldwide patent protection (United States and foreign),
+* United States copyright laws and international treaty provisions.
+* Therefore, you may use this Software only as provided in the license
+* agreement accompanying the software package from which you
+* obtained this Software ("EULA").
 * If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
-* non-transferable license to copy, modify, and compile the Software source
-* code solely for use in connection with Cypress's integrated circuit products.
-* Any reproduction, modification, translation, compilation, or representation
-* of this Software except as specified above is prohibited without the express
-* written permission of Cypress.
+* non-transferable license to copy, modify, and compile the Software
+* source code solely for use in connection with Cypress's
+* integrated circuit products.  Any reproduction, modification, translation,
+* compilation, or representation of this Software except as specified
+* above is prohibited without the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
 * EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
@@ -34,23 +35,27 @@
 * not authorize its products for use in any products where a malfunction or
 * failure of the Cypress product may reasonably be expected to result in
 * significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer of such
-* system or application assumes all risk of such use and in doing so agrees to
-* indemnify Cypress against all liability.
+* including Cypress's product in a High Risk Product, the manufacturer
+* of such system or application assumes all risk of such use and in doing
+* so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
-#include "cybsp.h"
 #include "cyhal.h"
+#include "cybsp.h"
 #include "cy_retarget_io.h"
-
-#ifdef BOOT_IMG
+/*******************************************************************************
+* Macros
+********************************************************************************/
+/* LED turn off and on interval based on BOOT or UPGRADE image*/
+#ifdef BOOT
     #define LED_TOGGLE_INTERVAL_MS         (5000u)
-#elif defined(UPGRADE_IMG)
+    #define IMG_TYPE                       "BOOT"
+#elif defined(UPGRADE)
     #define LED_TOGGLE_INTERVAL_MS         (250u)
+    #define IMG_TYPE                       "UPGRADE"
 #else
-    #error "[main-app] Please specify type of image: BOOT_IMG or UPGRADE_IMG\n"
+    #error "[BlinkyApp] Please define the image type: BOOT_IMG or UPGRADE_IMG\n"
 #endif
-
 
 /******************************************************************************
  * Function Name: main
@@ -70,6 +75,7 @@
 int main(void)
 {
     cy_rslt_t result = CY_RSLT_SUCCESS;
+    cyhal_wdt_t wdt_obj;
 
     /* Initialize the device and board peripherals */
     result = cybsp_init();
@@ -90,11 +96,17 @@ int main(void)
     /* satisfy the compiler */
     (void)result;
 
-    printf("\n====================================\n");
-    printf("[blinky_cm4] v%d.%d.%d [CM4]\n", APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD);
-    printf("\n====================================\n");
+    printf("\n=========================================================\n");
+    printf("[BlinkyApp] Image Type: %s, Version: %d.%d.%d, CPU: CM4\n", 
+           IMG_TYPE, APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD);
+    printf("\n=========================================================\n");
 
-    printf("[blinky_cm4] Red LED toggles at %d msec interval\n", LED_TOGGLE_INTERVAL_MS);
+    printf("[BlinkyApp] User LED toggles at %d msec interval\r\n\n", LED_TOGGLE_INTERVAL_MS);
+
+    /* Clear watchdog timer so that it doesn't trigger a reset */
+    cyhal_wdt_init(&wdt_obj, cyhal_wdt_get_max_timeout_ms());
+    cyhal_wdt_free(&wdt_obj);
+    printf("[BlinkyApp] Watchdog timer started by the bootloader is now turned off to mark the successful start of Blinky app.\r\n");
 
     for (;;)
     {

@@ -7,7 +7,7 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+# Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -195,7 +195,7 @@ PREBUILD=
 ifeq ($(TOOLCHAIN), GCC_ARM)
 LINKER_SCRIPT=$(wildcard ./linker_script/TARGET_$(TARGET)/TOOLCHAIN_$(TOOLCHAIN)/*.ld)
 LDFLAGS+=-Wl,--defsym=MCUBOOT_HEADER_SIZE=$(MCUBOOT_HEADER_SIZE)
-LDFLAGS+=-Wl,--defsym=CM0P_FLASH_SIZE=$(BOOTLOADER_APP_FLASH_SIZE),
+LDFLAGS+=-Wl,--defsym=CM0P_FLASH_SIZE=$(BOOTLOADER_APP_FLASH_SIZE)
 LDFLAGS+=-Wl,--defsym=CM0P_RAM_SIZE=$(BOOTLOADER_APP_RAM_SIZE)
 LDFLAGS+=-Wl,--defsym=CM4_FLASH_SIZE=$(MCUBOOT_SLOT_SIZE)
 LDFLAGS+=-Wl,--defsym=CY_FACT_APP_SIZE=$(FACT_APP_SIZE)

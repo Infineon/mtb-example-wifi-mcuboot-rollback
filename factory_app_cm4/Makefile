@@ -23,43 +23,24 @@
 # limitations under the License.
 ################################################################################
 
+# Include the application make files
+include ../common.mk
+
 ################################################################################
 # Basic Configuration
 ################################################################################
 
-# Target board/hardware (BSP)
-#
-# To change the target, it is recommended to use the Library manager
-# ('make modlibs' from command line), which will also update Eclipse IDE launch
-# configurations. If TARGET is manually edited, ensure TARGET_<BSP>.mtb with a
-# valid URL exists in the application, run 'make getlibs' to fetch BSP contents
-# and update or regenerate launch configurations for your IDE.
-TARGET=CY8CPROTO-062-4343W
+MTB_TYPE=PROJECT
 
 # Core processor
-CORE?=CM4
+CORE=CM4
+CORE_NAME=CM4_0
 
 # Name of application (used to derive name of final linked file).
 #
 # If APPNAME is edited, ensure to update or regenerate launch
 # configurations for your IDE.
 APPNAME=factory_app_cm4
-
-# Name of toolchain to use. Options include:
-#
-# GCC_ARM -- GCC provided with ModusToolbox IDE
-# ARM     -- ARM Compiler (must be installed separately)
-# IAR     -- IAR Compiler (must be installed separately)
-#
-# See also: CY_COMPILER_PATH below
-TOOLCHAIN=GCC_ARM
-
-# Default build configuration. Options include:
-#
-# Debug -- build with minimal optimizations, focus on debugging.
-# Release -- build with full optimizations
-# Custom -- build with custom configuration, set the optimization flag in CFLAGS
-CONFIG?=Debug
 
 # Starting address of the CM4 app or the offset at which the header of an image
 # will begin. Image = Header + App + TLV + Trailer. See MCUboot documenation for
@@ -78,10 +59,6 @@ ERASED_VALUE = 0xff
 # If set to "true" or "1", display full command-lines when building.
 VERBOSE=
 
-# Set USE_EXT_FLASH to 1, if you would like to place new OTA image(secondary slot image)
-# to external Flash.
-USE_EXT_FLASH?=0
-
 # Set this to 1, if you would like to print debug prints
 DEBUG_PRINT=0
 
@@ -90,6 +67,14 @@ BOOTLOADER_PATH=../bootloader_cm0p
 
 # Include the flash map configuration and make configs
 include $(BOOTLOADER_PATH)/shared_config.mk
+
+# factory_app size should be defined based on the external memory erase sector size
+# considering 0x40000 sector size, allocating 4 sectors (1MB) for the factory-image.
+ifeq ($(USE_EXTERNAL_FLASH), 1)
+FACT_APP_SIZE=0x200000
+else
+FACT_APP_SIZE=0x100000
+endif
 
 ################################################################################
 # Advanced Configuration
@@ -105,10 +90,10 @@ include $(BOOTLOADER_PATH)/shared_config.mk
 # ... then code in directories named COMPONENT_foo and COMPONENT_bar will be
 # added to the build
 #
-COMPONENTS=FREERTOS PSOC6HAL LWIP MBEDTLS SECURE_SOCKETS OTA_MQTT
+COMPONENTS+=FREERTOS PSOC6HAL LWIP MBEDTLS SECURE_SOCKETS OTA_MQTT
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
-DISABLE_COMPONENTS=
+DISABLE_COMPONENTS+=
 
 # By default the build system automatically looks in the Makefile's directory
 # tree for source code and builds it. The SOURCES variable can be used to
@@ -168,6 +153,28 @@ PREBUILD=
 # Custom post-build commands to run.
 POSTBUILD=
 
+###############################################################################
+#
+# OTA Setup
+#
+###############################################################################
+
+# Set to 1 to add OTA defines, sources, and libraries (must be used with MCUBoot)
+# NOTE: Extra code must be called from your app to initialize the OTA middleware.
+OTA_SUPPORT=1
+
+# Component for adding platform-specific code
+# ex: source/port_support/mcuboot/COMPONENT_OTA_PSOC_062/flash_qspi/flash_qspi.c
+COMPONENTS+=OTA_PSOC_062
+
+# Set Platform type (added to defines and used when finding the linker script)
+# Ex: PSOC_062_2M, PSOC_062_1M, PSOC_062_512K
+# Only one of the following two if conditions will be true
+OTA_PLATFORM=$(if $(filter PSOC6_02,$(DEVICE_COMPONENTS)),PSOC_062_2M,$(if $(filter PSOC6_03,$(DEVICE_COMPONENTS)),PSOC_062_512K))
+
+# used the same json file for all application
+OTA_FLASH_MAP=$(BOOTLOADER_PATH)/flashmap/$(FLASH_MAP)
+
 # Version of the app
 APP_VERSION_MAJOR?=1
 APP_VERSION_MINOR?=0
@@ -177,7 +184,32 @@ APP_VERSION_BUILD?=0
 # signing the image. Name of the key is file is set in bootloader_cm0p/shared_config.mk
 # as a common parameter to all three applications
 KEY_FILE_PATH=$(BOOTLOADER_PATH)/keys
-###########################################################################
+
+###############################################################################
+#
+# OTA Functionality support
+#
+###############################################################################
+ifeq ($(OTA_SUPPORT),1)
+
+    # Build location local to this root directory.
+    CY_BUILD_LOC:=./build
+    
+    # Add OTA_PLATFORM in DEFINES for platform-specific code
+    # ex: source/port_support/mcuboot/COMPONENT_OTA_PSOC_062/flash_qspi/flash_qspi.c
+    DEFINES+=$(OTA_PLATFORM)
+
+    # for use when running flashmap.py
+    FLASHMAP_PLATFORM=$(OTA_PLATFORM)
+
+    FLASHMAP_PYTHON_SCRIPT=flashmap.py
+    flash_map_mk_exists=$(shell if [ -s "flashmap.mk" ]; then echo "success"; fi )
+    ifneq ($(flash_map_mk_exists),)
+        $(info include flashmap.mk)
+        include ./flashmap.mk
+    endif # flash_map_mk_exists
+endif # OTA_SUPPORT
+
 # Defines for anycloud-ota with MCUBOOT
 #
 # Additional / custom linker flags.
@@ -186,40 +218,40 @@ ifeq ($(TOOLCHAIN),GCC_ARM)
 
 CY_ELF_TO_HEX_TOOL=$(CY_CROSSPATH)/bin/arm-none-eabi-objcopy
 CY_ELF_TO_HEX_OPTIONS=-O ihex
-LDFLAGS+=-Wl,--defsym=CM0P_FLASH_SIZE=$(BOOTLOADER_APP_FLASH_SIZE)
+LDFLAGS+=-Wl,--defsym=CM0P_FLASH_SIZE=$(FLASH_AREA_BOOTLOADER_SIZE)
 LDFLAGS+=-Wl,--defsym=CM0P_RAM_SIZE=$(BOOTLOADER_APP_RAM_SIZE)
-LDFLAGS+=-Wl,--defsym=CM4_FLASH_SIZE=$(MCUBOOT_SLOT_SIZE)
-LDFLAGS+=-Wl,--defsym=CY_BOOT_PRIMARY_1_SIZE=$(MCUBOOT_SLOT_SIZE)
-LDFLAGS+=-Wl,--defsym=CY_BOOT_SCRATCH_SIZE=$(MCUBOOT_SCRATCH_SIZE)
+LDFLAGS+=-Wl,--defsym=CM4_FLASH_SIZE=$(FLASH_AREA_IMG_1_PRIMARY_SIZE)
+LDFLAGS+=-Wl,--defsym=CY_BOOT_PRIMARY_1_SIZE=$(FLASH_AREA_IMG_1_PRIMARY_SIZE)
 LDFLAGS+=-Wl,--defsym=MCUBOOT_HEADER_SIZE=$(MCUBOOT_HEADER_SIZE)
 LDFLAGS+=-Wl,--defsym=CY_FACT_APP_SIZE=$(FACT_APP_SIZE)
-LDFLAGS+=-Wl,--defsym=CY_INT_FLASH_SIZE=$(INT_FLASH_SIZE)
 LDFLAGS+=-Wl,--defsym=CY_EXT_FLASH_SIZE=$(EXTERNAL_FLASH_SIZE)
 
 #Linker flags
 LDFLAGS+=-Wl,--undefined=uxTopUsedPriority
-
-#Linker script
-LINKER_SCRIPT=$(wildcard ./linker_script/TARGET_$(TARGET)/TOOLCHAIN_$(TOOLCHAIN)/*.ld)
 
 else
 $(error Only GCC_ARM is supported at this point)
 endif #GCC_ARM
 
 #Additional defines for the MCUBoot
-DEFINES+=CY_BOOT_SCRATCH_SIZE=$(MCUBOOT_SCRATCH_SIZE) \
-         CY_BOOT_BOOTLOADER_SIZE=$(BOOTLOADER_APP_FLASH_SIZE) \
-         CY_BOOT_PRIMARY_1_START=$(BOOTLOADER_APP_FLASH_SIZE) \
-         CY_BOOT_PRIMARY_1_SIZE=$(MCUBOOT_SLOT_SIZE) \
-         CY_BOOT_SECONDARY_1_SIZE=$(MCUBOOT_SLOT_SIZE) \
-         MCUBOOT_IMAGE_NUMBER=1
+DEFINES+=FLASH_AREA_BOOTLOADER_DEV_ID="$(FLASH_AREA_BOOTLOADER_DEV_ID)"\
+         FLASH_AREA_BOOTLOADER_START=$(FLASH_AREA_BOOTLOADER_START)\
+         FLASH_AREA_BOOTLOADER_SIZE=$(FLASH_AREA_BOOTLOADER_SIZE)\
+         FLASH_AREA_IMG_1_PRIMARY_DEV_ID="$(FLASH_AREA_IMG_1_PRIMARY_DEV_ID)"\
+         FLASH_AREA_IMG_1_PRIMARY_START=$(FLASH_AREA_IMG_1_PRIMARY_START) \
+         FLASH_AREA_IMG_1_PRIMARY_SIZE=$(FLASH_AREA_IMG_1_PRIMARY_SIZE) \
+         FLASH_AREA_IMG_1_SECONDARY_DEV_ID="$(FLASH_AREA_IMG_1_SECONDARY_DEV_ID)"\
+         FLASH_AREA_IMG_1_SECONDARY_SIZE=$(FLASH_AREA_IMG_1_SECONDARY_SIZE) \
+         FLASH_AREA_IMAGE_SCRATCH_SIZE=$(FLASH_AREA_IMAGE_SCRATCH_SIZE)
 
 # Defines to place Secondary slot in External Flash just 
 # after factory app image.
-ifeq ($(USE_EXT_FLASH),1)
-DEFINES+=CY_BOOT_USE_EXTERNAL_FLASH=1 \
-         CY_BOOT_SECONDARY_1_START=$(FACT_APP_SIZE)
-endif 
+ifeq ($(USE_EXTERNAL_FLASH),1)
+DEFINES+=OTA_USE_EXTERNAL_FLASH=1 \
+         FLASH_AREA_IMG_1_SECONDARY_START=$(FLASH_AREA_IMG_1_SECONDARY_START)
+else
+DEFINES+=FLASH_AREA_IMG_1_SECONDARY_START=$(FLASH_AREA_IMG_1_SECONDARY_START)
+endif
 
 ifeq ($(DEBUG_PRINT),1)
 DEFINES+=DEBUG_PRINT=1
@@ -235,7 +267,7 @@ BINARY_OUT_PATH=./build/$(TARGET)/$(CONFIG)/$(APPNAME)
 IMGTOOL_PATH=$(SEARCH_mcuboot)/scripts/imgtool.py
 CY_BUILD_VERSION=$(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_BUILD)
 SIGN_ARGS=sign --header-size $(MCUBOOT_HEADER_SIZE) --pad-header --align 8 -v $(CY_BUILD_VERSION) \
-               -S $(MCUBOOT_SLOT_SIZE) -M $(MCUBOOT_MAX_IMG_SECTORS) --overwrite-only -R $(ERASED_VALUE) -k $(KEY_FILE_PATH)/$(SIGN_KEY_FILE).pem
+               -S $(FLASH_AREA_IMG_1_PRIMARY_SIZE) -M $(MCUBOOT_MAX_IMG_SECTORS) --overwrite-only -R $(ERASED_VALUE) -k $(KEY_FILE_PATH)/$(SIGN_KEY_FILE).pem
 
 # Python path definition
 ifeq ($(OS),Windows_NT)
@@ -265,7 +297,7 @@ CY_APP_PATH=
 # the CY_GETLIBS_SHARED_PATH variable. The default location is one directory level
 # above the current app directory.
 # This is used with CY_GETLIBS_SHARED_NAME variable, which specifies the directory name.
-CY_GETLIBS_SHARED_PATH=../../
+CY_GETLIBS_SHARED_PATH=../..
 
 # Directory name of the shared repo location.
 #
@@ -277,28 +309,41 @@ CY_GETLIBS_SHARED_NAME=mtb_shared
 # IDE provided compiler by default).
 CY_COMPILER_PATH=
 
-
-# Locate ModusToolbox IDE helper tools folders in default installation
-# locations for Windows, Linux, and macOS.
-CY_WIN_HOME=$(subst \,/,$(USERPROFILE))
-CY_TOOLS_PATHS ?= $(wildcard \
-    $(CY_WIN_HOME)/ModusToolbox/tools_* \
-    $(HOME)/ModusToolbox/tools_* \
-    /Applications/ModusToolbox/tools_*)
-
-# If you install ModusToolbox IDE in a custom location, add the path to its
-# "tools_X.Y" folder (where X and Y are the version number of the tools
-# folder). Make sure you use forward slashes.
-CY_TOOLS_PATHS+=
-
-# Default to the newest installed tools folder, or the users override (if it's
-# found).
-CY_TOOLS_DIR=$(lastword $(sort $(wildcard $(CY_TOOLS_PATHS))))
-
-ifeq ($(CY_TOOLS_DIR),)
-$(error Unable to find any of the available CY_TOOLS_PATHS -- $(CY_TOOLS_PATHS). On Windows, use forward slashes.)
-endif
-
-$(info Tools Directory: $(CY_TOOLS_DIR))
-
 include $(CY_TOOLS_DIR)/make/start.mk
+
+###############################################################################
+#
+# OTA flashmap parser must be run after start.mk so that libs/mtb.mk is valid
+#
+###############################################################################
+
+ifeq ($(OTA_SUPPORT),1)
+#
+# Only when we are in the correct build pass
+#
+    ifneq ($(MAKECMDGOALS),getlibs)
+    ifneq ($(MAKECMDGOALS),get_app_info)
+    ifneq ($(MAKECMDGOALS),printlibs)
+    ifneq ($(FLASHMAP_PYTHON_SCRIPT),)
+    ifneq ($(OTA_FLASH_MAP),)
+    ifeq ($(CY_PYTHON_PATH),)
+        CY_PYTHON_PATH=$(shell which python)
+    endif
+        $(info "flashmap.py $(CY_PYTHON_PATH) $(BOOTLOADER_PATH)/scripts/$(FLASHMAP_PYTHON_SCRIPT) -p $(FLASHMAP_PLATFORM) -i $(OTA_FLASH_MAP) > flashmap.mk")
+        $(shell $(CY_PYTHON_PATH) $(BOOTLOADER_PATH)/scripts/$(FLASHMAP_PYTHON_SCRIPT) -p $(FLASHMAP_PLATFORM) -i $(OTA_FLASH_MAP) > flashmap.mk)
+        flash_map_status=$(shell if [ -s "flashmap.mk" ]; then echo "success"; fi )
+        ifeq ($(flash_map_status),)
+            $(info "")
+            $(error Failed to create flashmap.mk !)
+            $(info "")
+        else
+            $(info include flashmap.mk)
+            include ./flashmap.mk
+        endif # flash_map_status
+    endif # OTA_FLASH_MAP
+    endif # FLASHMAP_PYTHON_SCRIPT
+    endif # NOT getlibs
+    endif # NOT get_app_info
+    endif # NOT printlibs
+    
+endif # OTA_SUPPORT

@@ -43,6 +43,7 @@
 #include "cy_retarget_io.h"
 #include "ota_task.h"
 #include "led_task.h"
+#include "cycfg_pins.h"
 
 /* FreeRTOS header file */
 #include <FreeRTOS.h>
@@ -74,6 +75,11 @@ static TaskHandle_t state_mgr_task_handle;
 static void user_button_callback(void *handler_arg, cyhal_gpio_event_t event);
 static void state_mgr(void *args);
 
+cyhal_gpio_callback_data_t cb_data =
+{
+    .callback     = user_button_callback
+};
+
 /*******************************************************************************
  * Function Name: state_mgr_task_init
  *******************************************************************************
@@ -99,7 +105,7 @@ void state_mgr_task_init(void)
 *  cyhal_gpio_irq_event_t (unused)
 *
 *******************************************************************************/
-static void user_button_callback(void *handler_arg, cyhal_gpio_irq_event_t event)
+static void user_button_callback(void *handler_arg, cyhal_gpio_event_t event)
 {
     BaseType_t higher_priority_task_woken = pdFALSE;
 
@@ -136,7 +142,7 @@ static void state_mgr(void *args)
 
     /* Configure GPIO interrupt. */
     cyhal_gpio_register_callback(CYBSP_USER_BTN,
-                                  user_button_callback, NULL);
+                                  &cb_data);
 
     /* enable SW2 event. Global event is already enabled. */
     cyhal_gpio_enable_event(CYBSP_USER_BTN, CYHAL_GPIO_IRQ_FALL,

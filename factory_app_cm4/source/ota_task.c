@@ -59,8 +59,8 @@
 /* App specific configuration */
 #include "ota_app_config.h"
 
-#ifdef CY_BOOT_USE_EXTERNAL_FLASH
-#include "cy_smif_psoc6.h"
+#ifdef OTA_USE_EXTERNAL_FLASH
+#include "ota_serial_flash.h"
 #endif
 
 /*******************************************************************************
@@ -164,13 +164,20 @@ static void ota_task(void *args)
     cy_ota_set_log_level(CY_LOG_DEBUG);
 #endif
 
-#ifdef CY_BOOT_USE_EXTERNAL_FLASH
-    if (psoc6_qspi_init() != 0)
+#ifdef OTA_USE_EXTERNAL_FLASH
+    /* We need to init from every ext flash write
+     * See ota_serial_flash.h
+     */
+
+    /* initialize SMIF interface */
+    printf("call ota_smif_initialize()\n");
+    if (ota_smif_initialize() != CY_RSLT_SUCCESS)
     {
-        printf("psoc6_qspi_init() FAILED!!\r\n");
+        printf("ERROR returned from ota_smif_initialize()!!!!!\n");
         CY_ASSERT(0);
     }
-#endif /* CY_BOOT_USE_EXTERNAL_FLASH */
+
+#endif /* OTA_USE_EXTERNAL_FLASH */
 
     /* Connect to Wi-Fi AP */
     if( connect_to_wifi_ap() != CY_RSLT_SUCCESS )
@@ -283,7 +290,7 @@ cy_ota_callback_results_t ota_callback(cy_ota_cb_struct_t *cb_data)
         return CY_OTA_CB_RSLT_OTA_STOP;
     }
 
-    state_string  = cy_ota_get_state_string(cb_data->state);
+    state_string  = cy_ota_get_state_string(cb_data->ota_agt_state);
     error_string  = cy_ota_get_error_string(cy_ota_get_last_error());
 
     switch (cb_data->reason)
@@ -294,17 +301,17 @@ cy_ota_callback_results_t ota_callback(cy_ota_cb_struct_t *cb_data)
 
         case CY_OTA_REASON_SUCCESS:
             printf(">> APP CB OTA SUCCESS state:%d %s last_error:%s\n\n",
-                    cb_data->state,
+                    cb_data->ota_agt_state,
                     state_string, error_string);
             break;
 
         case CY_OTA_REASON_FAILURE:
             printf(">> APP CB OTA FAILURE state:%d %s last_error:%s\n\n",
-                    cb_data->state, state_string, error_string);
+                    cb_data->ota_agt_state, state_string, error_string);
             break;
 
         case CY_OTA_REASON_STATE_CHANGE:
-            switch (cb_data->state)
+            switch (cb_data->ota_agt_state)
             {
                 case CY_OTA_STATE_NOT_INITIALIZED:
                 case CY_OTA_STATE_EXITING:

@@ -88,12 +88,22 @@ int main(void)
     cy_rslt_t result = CY_RSLT_SUCCESS;
     cyhal_wdt_t wdt_obj;
 
+    /* Clear watchdog timer so that it doesn't trigger a reset */
+    cyhal_wdt_init(&wdt_obj, cyhal_wdt_get_max_timeout_ms());
+    cyhal_wdt_free(&wdt_obj);
+
     /* This enables RTOS aware debugging in OpenOCD */
     uxTopUsedPriority = configMAX_PRIORITIES - 1 ;
 
     /* Initialize the board support package */
     result = cybsp_init() ;
     CY_ASSERT(result == CY_RSLT_SUCCESS);
+
+    /* Free the hardware instance object iff initialized by other core
+     * before initializing the same hardware instance object in this core. */
+    cyhal_hwmgr_free(&CYBSP_UART_obj);
+    cyhal_hwmgr_free(&CYBSP_DEBUG_UART_RX_obj);
+    cyhal_hwmgr_free(&CYBSP_DEBUG_UART_TX_obj);
 
     /* Initialize retarget-io to use the debug UART port */
     result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,
@@ -115,10 +125,6 @@ int main(void)
     printf("factory_app_cm4 version: %d.%d.%d\n",
             APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD);
     printf("===============================================================\n\n");
-
-    /* Clear watchdog timer so that it doesn't trigger a reset */
-    cyhal_wdt_init(&wdt_obj, cyhal_wdt_get_max_timeout_ms());
-    cyhal_wdt_free(&wdt_obj);
 
     printf("\nWatchdog timer started by the bootloader is now turned off!!!\n\n");
 

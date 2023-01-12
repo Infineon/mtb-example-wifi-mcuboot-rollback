@@ -40,21 +40,46 @@
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
-#include "cyhal.h"
 #include "cybsp.h"
+#include "cyhal.h"
 #include "cy_retarget_io.h"
+
+/* MCUboot header file */
+#include "bootutil/bootutil.h"
+
+/* Watchdog header file */
+#include "watchdog.h"
+
 /*******************************************************************************
 * Macros
 ********************************************************************************/
 /* LED turn off and on interval based on BOOT or UPGRADE image*/
-#ifdef BOOT
-    #define LED_TOGGLE_INTERVAL_MS         (5000u)
+#ifdef BOOT_IMAGE
+    #define LED_TOGGLE_INTERVAL_MS         (1000u)
     #define IMG_TYPE                       "BOOT"
-#elif defined(UPGRADE)
+#elif defined(UPGRADE_IMAGE)
     #define LED_TOGGLE_INTERVAL_MS         (250u)
     #define IMG_TYPE                       "UPGRADE"
 #else
-    #error "[BlinkyApp] Please define the image type: BOOT_IMG or UPGRADE_IMG\n"
+    #error "[BlinkyApp] Please define the image type: BOOT_IMAGE or UPGRADE_IMAGE\n"
+#endif
+
+/* Img_ok offset in the slot trailer */
+#define USER_SWAP_IMAGE_OK_OFFS                 (24UL)
+#define USER_SWAP_IMAGE_OK                      (1UL)
+
+/* User input to mark the upgrade image in primary slot permanent */
+#define UPGRADE_IMG_PERMANENT_CAPITAL           ('Y')
+#define UPGRADE_IMG_PERMANENT_SMALL             ('y')
+
+/* UART function parameter value to wait forever */
+#define UART_WAIT_FOR_EVER                      (0)
+
+/*******************************************************************************
+* Function Prototypes
+********************************************************************************/
+#if (SWAP_DISABLED == 0) && defined(UPGRADE_IMAGE)
+int set_img_ok(uint32_t address, uint8_t value);
 #endif
 
 /******************************************************************************
@@ -74,12 +99,21 @@
  ******************************************************************************/
 int main(void)
 {
-    cy_rslt_t result = CY_RSLT_SUCCESS;
-    cyhal_wdt_t wdt_obj;
+    cy_rslt_t result;
+
+    /* Update watchdog timer to mark successful start up of application */
+    cy_wdg_kick();
+    cy_wdg_free();
 
     /* Initialize the device and board peripherals */
     result = cybsp_init();
     CY_ASSERT(result == CY_RSLT_SUCCESS);
+
+    /* Free the hardware instance object iff initialized by other core
+     * before initializing the same hardware instance object in this core. */
+    cyhal_hwmgr_free(&CYBSP_UART_obj);
+    cyhal_hwmgr_free(&CYBSP_DEBUG_UART_RX_obj);
+    cyhal_hwmgr_free(&CYBSP_DEBUG_UART_TX_obj);
 
     /* Enable global interrupts */
     __enable_irq();
@@ -92,21 +126,57 @@ int main(void)
     result = cyhal_gpio_init(CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT,
               CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
     CY_ASSERT(result == CY_RSLT_SUCCESS);
-
-    /* satisfy the compiler */
-    (void)result;
+    
+    (void) result; /* To avoid compiler warning in release build */
 
     printf("\n=========================================================\n");
     printf("[BlinkyApp] Image Type: %s, Version: %d.%d.%d, CPU: CM4\n", 
            IMG_TYPE, APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD);
     printf("\n=========================================================\n");
 
-    printf("[BlinkyApp] User LED toggles at %d msec interval\r\n\n", LED_TOGGLE_INTERVAL_MS);
-
-    /* Clear watchdog timer so that it doesn't trigger a reset */
-    cyhal_wdt_init(&wdt_obj, cyhal_wdt_get_max_timeout_ms());
-    cyhal_wdt_free(&wdt_obj);
     printf("[BlinkyApp] Watchdog timer started by the bootloader is now turned off to mark the successful start of Blinky app.\r\n");
+
+#if (SWAP_DISABLED == 0) && defined(UPGRADE_IMAGE)
+
+    uint32_t img_ok_addr;
+    uint8_t response;
+
+    img_ok_addr = USER_APP_START + USER_APP_SIZE - USER_SWAP_IMAGE_OK_OFFS;
+
+    if (*((uint8_t *)img_ok_addr) != USER_SWAP_IMAGE_OK)
+    {
+        printf("[BlinkyApp] Do you want to mark the upgrade image in primary slot permanent (Y/N) ?\r\n");
+        cyhal_uart_getc(&cy_retarget_io_uart_obj, &response, UART_WAIT_FOR_EVER);
+        printf("[BlinkyApp] Received response: %c\r\n", response);
+
+        if((UPGRADE_IMG_PERMANENT_CAPITAL == response) || (UPGRADE_IMG_PERMANENT_SMALL == response))
+        {
+            /* Write Image OK flag to the slot trailer, so MCUBoot-loader
+             * will not revert the new image.
+             */
+            result = set_img_ok(img_ok_addr, USER_SWAP_IMAGE_OK);
+            if (CY_RSLT_SUCCESS == result)
+            {
+                printf("[BlinkyApp] SWAP Status : Image OK was set.\r\n");
+            }
+            else
+            {
+                printf("[BlinkyApp] SWAP Status : Failed to set Image OK.\r\n");
+            }
+        }
+        else
+        {
+            printf("[BlinkyApp] The upgrade image was not marked permanent. Revert swap will happen in the next boot.\r\n");
+        }
+    }
+    else
+    {
+        printf("[BlinkyApp] Image OK is already set in trailer\r\n");
+    }
+
+#endif
+
+    printf("[BlinkyApp] User LED toggles at %d msec interval\r\n\n", LED_TOGGLE_INTERVAL_MS);
 
     for (;;)
     {
@@ -118,5 +188,5 @@ int main(void)
     return 0;
 }
 
-
 /* [] END OF FILE */
+

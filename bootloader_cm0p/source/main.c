@@ -48,6 +48,8 @@
 #include "cycfg.h"
 #include "cy_result.h"
 #include "cy_retarget_io_pdl.h"
+#include "cyhal.h"
+#include "cybsp.h"
 
 #include "cycfg_clocks.h"
 #include "cycfg_peripherals.h"
@@ -61,11 +63,14 @@
 #include "bootutil/bootutil.h"
 #include "bootutil/sign_key.h"
 #include "bootutil/bootutil_log.h"
+#include "bootutil/fault_injection_hardening.h"
 
 /*  flash access */
 #include "flash_map_backend/flash_map_backend.h"
 #include "cy_smif_psoc6.h"
 #include "sysflash.h"
+
+/* Watchdog header file */
 #include "watchdog.h"
 
 /*******************************************************************************
@@ -82,12 +87,12 @@
  * 0 - SMIF disabled (no external memory)
  * 1, 2, 3, or 4 - slave select line to which the memory module is connected. 
  */
-#define QSPI_SLAVE_SELECT_LINE  (1UL)
+#define QSPI_SLAVE_SELECT_LINE              (1UL)
 
 /* Button status:
  * GPIO will read LOW, if pressed
  */
-#define USER_BTN_PRESSED        (0)
+#define CYBSP_USER_BTN_PRESSED        (0)
 
 /* here, In this code example MCUBOOT_IMAGE_NUMBER=1
  * MCUBOOT_IMAGE_1_INDEX value is always 0.
@@ -96,7 +101,7 @@
 #define MCUBOOT_IMAGE_1_INDEX   (0)
 
 /* WDT time out for reset mode, in milliseconds. */
-#define WDT_TIME_OUT_MS         (4000UL)
+#define WDT_TIME_OUT_MS                     (4000UL)
 
 /* user button interrupt configurations  */
 static cy_stc_sysint_t user_btn_isr_cfg =
@@ -118,7 +123,7 @@ static cy_rslt_t transfer_factory_image(void);
 static void do_boot(struct boot_rsp *rsp, char *msg);
 static void rollback_to_factory_image(void);
 static void user_button_isr(void);
-static void deinit_hw(void);
+static void hw_deinit(void);
 
 /******************************************************************************
  * Function Name: user_button_isr
@@ -135,7 +140,7 @@ static void user_button_isr(void)
     is_user_button_pressed = true;
 
     /* clear the interrupt flag */
-    Cy_GPIO_ClearInterrupt(USER_BTN_PORT, USER_BTN_PIN);
+    Cy_GPIO_ClearInterrupt(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_PIN);
 }
 
 /******************************************************************************
@@ -191,7 +196,7 @@ static cy_rslt_t transfer_factory_image(void)
     if(result != CY_RSLT_SUCCESS)
     {
         BOOT_LOG_ERR("Failed to read 'factory app' magic from external memory\r\n");
-        
+
         /* critical error: asserting */
         CY_ASSERT(0);
     }
@@ -281,6 +286,7 @@ static cy_rslt_t transfer_factory_image(void)
     return result;
 }
 
+
 /******************************************************************************
  * Function Name: do_boot
  ******************************************************************************
@@ -295,17 +301,54 @@ static cy_rslt_t transfer_factory_image(void)
  ******************************************************************************/
 static void do_boot(struct boot_rsp *rsp, char *msg)
 {
-    uint32_t app_addr = (rsp->br_image_off + rsp->br_hdr->ih_hdr_size);
+     uintptr_t flash_base = 0;
 
-    CY_ASSERT(msg != NULL);
+    if (rsp != NULL)
+    {
+        int rc = flash_device_base(rsp->br_flash_dev_id, &flash_base);
 
-    BOOT_LOG_INF("Starting %s on CM4. Please wait...", msg);
+        if (0 == rc)
+        {
+            fih_uint app_addr = fih_uint_encode(flash_base +
+                                                rsp->br_image_off +
+                                                rsp->br_hdr->ih_hdr_size);
 
-    cy_retarget_io_wait_tx_complete(CYBSP_UART_HW, CM4_BOOT_DELAY_MS);
+            BOOT_LOG_INF("Starting User Application (wait)...");
+            if (IS_ENCRYPTED(rsp->br_hdr))
+            {
+                BOOT_LOG_INF(" * User application is encrypted");
+            }
 
-    deinit_hw();
+            BOOT_LOG_INF("Start slot Address: 0x%08" PRIx32, (uint32_t)fih_uint_decode(app_addr));
 
-    Cy_SysEnableCM4(app_addr);
+            rc = flash_device_base(rsp->br_flash_dev_id, &flash_base);
+            if ((rc != 0) || fih_uint_not_eq(fih_uint_encode(flash_base +
+                                             rsp->br_image_off +
+                                             rsp->br_hdr->ih_hdr_size),
+                                             app_addr))
+            {
+                //return false;
+            }
+
+            BOOT_LOG_INF("MCUBoot Bootloader finished");
+            BOOT_LOG_INF("Deinitializing hardware...");
+
+            hw_deinit();
+
+#ifdef USE_XIP
+            BOOT_LOG_INF("XIP: Switch to SMIF XIP mode");
+            qspi_set_mode(CY_SMIF_MEMORY);
+#endif
+            CY_ASSERT(msg != NULL);
+            BOOT_LOG_INF("Starting %s on CM4. Please wait...", msg);
+            Cy_SysEnableCM4(fih_uint_decode(app_addr));
+            //return true;
+        }
+        else
+        {
+            BOOT_LOG_ERR("Flash device ID not found");
+        }
+    }
 }
 
 /******************************************************************************
@@ -313,7 +356,7 @@ static void do_boot(struct boot_rsp *rsp, char *msg)
  ******************************************************************************
  * Summary:
  * This function validates the primary slot and starts CM4 boot, if a valid
- * image is found in primary slot, never returns on successful boot of the
+ * image is found in primary slot, returns on successful boot of the
  * factory image, and asserts on failure.
  *
  ******************************************************************************/
@@ -335,15 +378,16 @@ static void rollback_to_factory_image(void)
      {
          BOOT_LOG_INF("factory app validated successfully");
 
-        /* never return */
          do_boot(&rsp, "Factory app");
      }
+     else
+     {
+         /* assert on failure to rollback */
+         BOOT_LOG_ERR("factory app validation failed");
+         BOOT_LOG_ERR("Can't Rollback, asserting!!");
 
-     /* assert on failure to rollback */
-     BOOT_LOG_ERR("factory app validation failed");
-     BOOT_LOG_ERR("Can't Rollback, asserting!!");
-
-     CY_ASSERT(0);
+         CY_ASSERT(0);
+     }
 }
 
 /******************************************************************************
@@ -353,12 +397,13 @@ static void rollback_to_factory_image(void)
  *  This function performs the necessary hardware de-initialization.
  *
  ******************************************************************************/
-static void deinit_hw(void)
+static void hw_deinit(void)
 {
+    cy_retarget_io_wait_tx_complete(CYBSP_UART_HW, 10);
     cy_retarget_io_pdl_deinit();
 
-    Cy_GPIO_Port_Deinit(CYBSP_UART_RX_PORT);
-    Cy_GPIO_Port_Deinit(CYBSP_UART_TX_PORT);
+    Cy_GPIO_Port_Deinit(CYBSP_DEBUG_UART_RX_PORT);
+    Cy_GPIO_Port_Deinit(CYBSP_DEBUG_UART_TX_PORT);
 
     qspi_deinit(QSPI_SLAVE_SELECT_LINE);
 }
@@ -377,8 +422,6 @@ int main(void)
     cy_rslt_t result = CY_RSLT_SUCCESS;
     struct boot_rsp rsp;
     
-    /* Initialize system resources and peripherals. */
-    init_cycfg_all();
 
     /* Certain PSoC 6 devices enable CM4 by default at startup. It must be 
      * either disabled or enabled & running a valid application for flash write
@@ -393,6 +436,10 @@ int main(void)
         Cy_SysDisableCM4();
     }
     #endif /* #if defined(CY_DEVICE_PSOC6ABLE2) */
+
+    /* Initialize system resources and peripherals. */
+    cybsp_init();
+
 
     /* Initialize retarget-io to redirect the printf output */
     cy_retarget_io_pdl_init(CY_RETARGET_IO_BAUDRATE);
@@ -419,6 +466,7 @@ int main(void)
 
     /* perform upgrade if pending and check primary slot is valid or not
      */
+
     if (boot_go(&rsp) == 0)
     {
         BOOT_LOG_INF("Application validated successfully !");
@@ -429,19 +477,20 @@ int main(void)
          * the application directly.
          */
 
-        if(Cy_GPIO_Read(USER_BTN_PORT, USER_BTN_PIN) == USER_BTN_PRESSED)
+        if(Cy_GPIO_Read(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_PIN) == CYBSP_USER_BTN_PRESSED)
         {
             BOOT_LOG_INF("Detected user button event");
             BOOT_LOG_INF("Rollback initiated at startup \r\n") ;
-            /* never return from here */
             rollback_to_factory_image();
         }
-
-        /* User button is not pressed at this point !
-         * Boot to application
-         */
-        cy_wdg_init(WDT_TIME_OUT_MS);
-        do_boot(&rsp, "Application");
+        else
+        {
+            /* User button is not pressed at this point !
+             * Boot to application
+             */
+            cy_wdg_init(WDT_TIME_OUT_MS);
+            do_boot(&rsp, "Application");
+        }
     }
     else
     {

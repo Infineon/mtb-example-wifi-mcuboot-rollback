@@ -257,7 +257,7 @@ PUBLISHER_PUBLISH_QOS = 1     # AWS broker does not support QOS of 2
 PUBLISHER_SUBSCRIBE_QOS = 1   # AWS broker does not support QOS of 2
 
 # Path to the firmware image
-OTA_IMAGE_FILE = "../../blinky_cm4/build/UPGRADE/blinky_cm4/CY8CPROTO-062-4343W/Debug/blinky_cm4.bin"
+OTA_IMAGE_FILE ="../../blinky_cm4/build/UPGRADE/APP_CY8CPROTO-062-4343W/Debug/blinky_cm4.bin"
 
 # Paho MQTT client settings
 MQTT_KEEP_ALIVE = 60 # in seconds
@@ -873,6 +873,8 @@ if __name__ == "__main__":
     print("        : -l turn on extra logging")
     print("###########################################################################################################")
     last_arg = ""
+    OTA_IMAGE_FILE_NEW = None
+
     for i, arg in enumerate(sys.argv):
         if arg == "-h" or arg == "--help":
             sys.exit()
@@ -882,7 +884,7 @@ if __name__ == "__main__":
             DEBUG_LOG = 1
             DEBUG_LOG_STRING = "1"
         if last_arg == "-f":
-            OTA_IMAGE_FILE = arg
+            OTA_IMAGE_FILE_NEW = arg
         if last_arg == "-b":
             if ((arg == "amazon") | (arg == "a")):
                 BROKER_ADDRESS = AMAZON_BROKER_ADDRESS
@@ -896,9 +898,12 @@ if __name__ == "__main__":
             KIT = arg
         last_arg = arg
 
-print("\n")
+    if OTA_IMAGE_FILE_NEW == None:
+        OTA_IMAGE_FILE = "../../blinky_cm4/build/UPGRADE/APP_" + KIT.replace("_","-") + "/Debug/blinky_cm4.bin"
+    else:
+        OTA_IMAGE_FILE = OTA_IMAGE_FILE_NEW
 
-OTA_IMAGE_FILE = "../../blinky_cm4/build/UPGRADE/blinky_cm4/" + KIT.replace("_","-") + "/Debug/blinky_cm4.bin"
+print("\n")
 
 if TLS_ENABLED:
     print("   Using TLS")
@@ -910,10 +915,10 @@ print("   Using   File: " + OTA_IMAGE_FILE)
 print("   extra debug : " + DEBUG_LOG_STRING)
 
 
-PUBLISHER_JOB_REQUEST_TOPIC = COMPANY_TOPIC_PREPEND + "/" + KIT + "/" + PUBLISHER_LISTEN_TOPIC
+PUBLISHER_JOB_REQUEST_TOPIC = COMPANY_TOPIC_PREPEND + "/APP_" + KIT + "/" + PUBLISHER_LISTEN_TOPIC
 print("PUBLISHER_JOB_REQUEST_TOPIC   : " + PUBLISHER_JOB_REQUEST_TOPIC)
 
-PUBLISHER_DIRECT_REQUEST_TOPIC = COMPANY_TOPIC_PREPEND + "/" + KIT + "/" + PUBLISHER_DIRECT_TOPIC
+PUBLISHER_DIRECT_REQUEST_TOPIC = COMPANY_TOPIC_PREPEND + "/APP_" + KIT + "/" + PUBLISHER_DIRECT_TOPIC
 print("PUBLISHER_DIRECT_REQUEST_TOPIC: " + PUBLISHER_DIRECT_REQUEST_TOPIC)
 print("\n")
 

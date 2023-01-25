@@ -68,7 +68,7 @@ endif
 ifneq ($(FLASH_MAP), )
 generate_flashmap_cm4:
 	@echo -e "\n==============================================================================================================================================================="
-	@echo -e "= Generating flashmap.mk using $(FLASH_MAP) file (Look out for any warnings or errors in this step) ="
+	@echo -e "= Generating flashmap.mk ="
 	@echo -e "==============================================================================================================================================================="
 	$(PYTHON_PATH) ../bootloader_cm0p/scripts/flashmap.py -p $(PLATFORM) -i ../bootloader_cm0p/flashmap/$(FLASH_MAP) -o ./source/cy_flash_map.h -d 1 > ./flashmap.mk
 	@echo -e "===============================================================================================================================================================\n"

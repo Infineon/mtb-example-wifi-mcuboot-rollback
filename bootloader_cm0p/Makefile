@@ -62,7 +62,7 @@ endif
 ifneq ($(FLASH_MAP), )
 generate_flashmap_cm0p:
 	@echo -e "\n============================================================="
-	@echo -e "= Generating cy_flash_map.h and flashmap.mk using $(FLASH_MAP) file (Look out for any warnings or errors in this step) ="
+	@echo -e "= Generating cy_flash_map.h and flashmap.mk ="
 	@echo -e "============================================================="
 	$(PYTHON_PATH) ./scripts/flashmap.py -p $(PLATFORM) -i ./flashmap/$(FLASH_MAP) -o ./source/cy_flash_map.h > ./flashmap.mk
 	@echo -e "=============================================================\n"

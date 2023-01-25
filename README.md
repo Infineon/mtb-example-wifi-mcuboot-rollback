@@ -81,6 +81,14 @@ Create the project and open it using one of the following:
 
 For more details, see the [Eclipse IDE for ModusToolbox&trade; software user guide](https://www.infineon.com/MTBEclipseIDEUserGuide) (locally available at *{ModusToolbox&trade; software install directory}/docs_{version}/mt_ide_user_guide.pdf*).
 
+**Note:** If Project Creator displays errors/warnings like shown in the following image, you can ignore these errors and close Project Creator. The project will be created successfully:
+
+```
+ERROR:/bin/bash: - : syntax error: operand expected (error token is "- "))
+```
+
+![](images/error.png)
+
 </details>
 
 <details><summary><b>In command-line interface (CLI)</b></summary>
@@ -208,16 +216,16 @@ This code example uses the locally installable Mosquitto broker that runs on you
 
    This step will generate the following files in the same *\<factory_app_cm4>/scripts/* directory:
 
-   1. *mosquitto_ca.crt* - Root CA certificate
-   2. *mosquitto_ca.key* - Root CA private key
-   3. *mosquitto_server.crt* - Server certificate
-   4. *mosquitto_server.key* - Server private key
-   5. *mosquitto_client.crt* - Client certificate
-   6. *mosquitto_client.key* - Client private key
+   1. *mosquitto_ca.crt* – Root CA certificate
+   2. *mosquitto_ca.key* – Root CA private key
+   3. *mosquitto_server.crt* – Server certificate
+   4. *mosquitto_server.key* – Server private key
+   5. *mosquitto_client.crt* – Client certificate
+   6. *mosquitto_client.key* – Client private key
 
 7. The *\<factory_app_cm4>/scripts/mosquitto.conf* file is pre-configured for starting the Mosquitto server for this code example. You can edit the file if you wish to make other changes to the broker settings.
 
-8. Starting the Mosquitto MQTT server:
+8. Start the Mosquitto MQTT server:
 
    - **Using the code example in TLS mode (default):**
 
@@ -369,7 +377,7 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
 
    <details><summary><b>Using CLI</b></summary>
 
-     From the terminal, execute the `make program` command to build and program the application using the default toolchain to the default target. You can specify a target and toolchain manually:
+     From the terminal, execute the `make program_proj` command to build and program the application using the default toolchain to the default target. You can specify a target and toolchain manually:
       ```
       make program_proj TARGET=<BSP> TOOLCHAIN=<toolchain>
       ```
@@ -439,7 +447,14 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
 
     ![](images/ota-and-boot-to-user-app.png)
 
-   Once all chunks are received and written to the secondary slot, the factory app will reset the device. On reset, the bootloader will verify the new image in the secondary slot, copy it to the primary slot, and boot the newly downloaded Blinky app. To confirm the swap of the upgrade image from the secondary slot into the primary slot and make it the primary image, enter Y in the UART terminal. To revert to the original image, enter N. Confirm that the user LED toggles at the 250-millisecond interval. On every reset, the *bootloader* app will start the user application in the primary slot, as long as it is valid.
+   Once all chunks are received and written to the secondary slot, the factory app will reset the device. On reset, the bootloader will verify the new image in the secondary slot, copy it to the primary slot, and boot the newly downloaded Blinky app.
+
+- To confirm the swap of the upgrade image from the secondary slot into the primary slot and make it the primary image, enter `Y` in the UART terminal.
+
+- To revert to the original image, enter `N`.
+
+Confirm that the user LED toggles at the 250-millisecond interval. On every reset, the *bootloader* app will start the user application in the primary slot as long as it is valid.
+
 
 ## Developer notes
 
@@ -499,13 +514,13 @@ Figure 6 shows the console messages: messages in the highlighted text boxes indi
 
 This is a tiny application that simply blinks the user LED on startup. The LED blink interval is configured based on the `IMG_TYPE` specified. By default, `IMG_TYPE` is set to `UPGRADE` to generate suitable binaries for upgrade. The bootloader upgrade image is in overwrite mode in this case; the LED toggles at a 250-millisecond interval. The bootloader upgrade image is the swap mode upgrade image from the secondary slot into the primary slot and make it the primary image, enter **Y** in the UART terminal. To revert to the original image, enter **N**. Confirm that the user LED toggles at the 250-millisecond interval.
 
-The image will be signed using the `keys` available in *bootloader_cm0p/keys*. It is possible to build the Blinky application as a `BOOT` image and program it to the primary slot directly (not discussed in this document).
+The image will be signed using the keys available in *bootloader_cm0p/keys*. It is possible to build the Blinky application as a *BOOT* image and program it to the primary slot directly (not discussed in this document).
 
 ### Factory app implementation
 
 The factory application uses the [ota-update](https://github.com/Infineon/ota-update) middleware; it performs an OTA upgrade using the MQTT protocol. The application connects to the MQTT server and receives the OTA upgrade package, if available. The OTA upgrade image will be downloaded to the secondary slot of MCUboot in chunks. Once the complete image is downloaded, the application issues an MCU reset. On reset, the bootloader starts and handles the rest of the upgrade process.
 
-The factory app is signed using the `keys` available under *bootloader_cm0p/keys* to ensue that the bootloader boots it safely. This process detects malicious firmware or possible corruptions early in the boot process.
+The factory app is signed using the keys available under *bootloader_cm0p/keys* to ensue that the bootloader boots it safely. This process detects malicious firmware or possible corruptions early in the boot process.
 
 **Figure 7. factory_app_cm4 implementation overview**
 
@@ -516,7 +531,7 @@ The factory app is signed using the `keys` available under *bootloader_cm0p/keys
 
 The development kit has a 2-MB internal flash and a 64-MB external flash, which is partitioned into the following regions:
 
-|Region <br /> <br /> <br />              | Size <br /> *psoc62_swap_single_smif.json* *psoc62_overwrite_single_smif.json* | Size <br /> *psoc62_swap_single.json* *psoc62_overwrite_single.json* | Description
+|Region <br> <br> <br>              | Size <br> *psoc62_swap_single_smif.json* *psoc62_overwrite_single_smif.json* | Size <br> *psoc62_swap_single.json* *psoc62_overwrite_single.json* | Description
 |---------------------|-------------|----------|--------
 |Bootloader partition | 96 KB | 96 KB | Partition is the first region in the internal flash memory that holds *bootloader_cm0p*.
 |Primary partition    | 1792 KB | 952 KB | Partition where the bootable application is placed. Primary boot slot of *bootloader_cm0p*.
@@ -525,6 +540,8 @@ The development kit has a 2-MB internal flash and a 64-MB external flash, which 
 |RFU                  | 160 KB | 44 KB | Region reserved for future use.
 |Factory app reserved | First 2 MB in external flash | First 1 MB in external flash | Region reserved for *factory_app_cm4*. Although the maximum size of the factory application cannot exceed the primary slot size, additional 72 KB (1 MB – 952 KB) is allocated to align with the erase sector size of the QSPI flash (S25FL512S).
 |User region            | 60 MB | 63 MB | Region for application use.
+
+<br>
 
 **Figure 8. Memory layout**
 
@@ -615,12 +632,16 @@ This example includes a sample key-pair under the *bootloader_cm0p/keys* directo
 | SMIF (PDL) | QSPIPort | Used for interfacing with the QSPI NOR flash |
 | GPIO (HAL)    | CYBSP_USER_BTN         | User button |
 
+<br>
+
 #### **Blinky app**
 
 | Resource  |  Alias/Object     |    Purpose     |
 | :------- | :------------    | :------------ |
 | UART (HAL)|cy_retarget_io_uart_obj| UART HAL object used by Retarget-IO for the debug UART port  |
 | GPIO (HAL)    | CYBSP_USER_LED         | User LED |
+
+<br>
 
 #### **Factory app**
 
@@ -659,6 +680,7 @@ Document title: *CE230815* – *PSoC&trade; 6 MCU: MCUboot-based bootloader with
  2.0.0   | Update to: <br>1. Support anycloud-ota v4.X library <br>2. Use locally installed mosquitto broker
  2.1.0   | Updated to support ModusToolbox™ software v2.4 <br>Fixed minor bugs
  3.0.0   | Updates the example to use mcuboot v1.8.1 and ota-update v2.0.0 library <br> Updated to support ModusToolbox™ software v3.0
+ 3.1.0   | Fixed minor bugs
 
 <br>
 

@@ -1,12 +1,14 @@
 # PSoC&trade; 6 MCU: MCUboot-based bootloader with rollback to factory app
 
-This code example implements a bootloader based on [MCUboot](https://mcu-tools.github.io/mcuboot/) to demonstrate ‘Rollback’ to a known good image ("factory_app_cm4") in case of unrecoverable error conditions in the current application.
+This code example implements a bootloader based on [MCUboot](https://mcu-tools.github.io/mcuboot/) to demonstrate ‘rollback’ to a known good image ("factory_app_cm4") in case of unrecoverable error conditions in the current application.
 
 In this example, the bootloader can load the factory application from a known location in the external memory by directly copying it into the primary slot in the internal flash, based on user inputs during boot. The factory app can then perform the OTA upgrade to download an image over Wi-Fi and place it to the secondary slot of MCUboot.
 
 This code example includes the following applications:
 
-- **bootloader_cm0p:** The bootloader is a tiny application based on [MCUboot](https://mcu-tools.github.io/mcuboot/). This is the first application to start on every reset, and runs entirely on the CM0+ CPU. It is responsible for validating and authenticating the firmware images in the primary and secondary slots, performing necessary upgrades, and booting the CM4 CPU. The *bootloader* determines the application to run on the CM4 CPU (*blinky_cm4* or *factory_app_cm4*) depending on the state of the primary slot and user events. If you are new to MCUboot, you can try the [MCUboot-based basic bootloader](https://github.com/Infineon/mtb-example-psoc6-mcuboot-basic) example first to understand the basics.
+- **bootloader_cm0p:** The bootloader is a tiny application based on [MCUboot](https://mcu-tools.github.io/mcuboot/). This is the first application to start on every reset, and runs entirely on the CM0+ CPU. It is responsible for validating and authenticating the firmware images in the primary and secondary slots, performing necessary upgrades, and booting the CM4 CPU.
+
+   The *bootloader* determines the application to run on the CM4 CPU (*blinky_cm4* or *factory_app_cm4*) depending on the state of the primary slot and user events. If you are new to MCUboot, you can try the [MCUboot-based basic bootloader](https://github.com/Infineon/mtb-example-psoc6-mcuboot-basic) example first to understand the basics.
 
 - **blinky_cm4:** This application is designed to run on the CM4 CPU. At present, this is a tiny application that blinks the LED at different rates based on build-time configurations. On successful build, a binary file is generated, which is used to demonstrate OTA firmware upgrades.
 
@@ -40,6 +42,8 @@ This example requires PSoC&trade; 6 MCU devices with at least 2-MB flash and 1-M
 - [PSoC&trade; 6 Wi-Fi Bluetooth&reg; prototyping kit](https://www.infineon.com/cms/en/product/evaluation-boards/cy8cproto-062-4343w/) (`CY8CPROTO-062-4343W`) - Default target
 
 - [PSoC&trade; 62S2 Wi-Fi Bluetooth&reg; pioneer kit](https://www.infineon.com/cms/en/product/evaluation-boards/cy8ckit-062s2-43012/) (`CY8CKIT-062S2-43012`)
+
+- [PSoC&trade; 62S2 evaluation kit](https://www.infineon.com/cms/en/product/evaluation-boards/cy8ceval-062s2) (`CY8CEVAL-062S2-LAI-4373M2`)
 
 ## Hardware setup
 
@@ -80,14 +84,6 @@ Create the project and open it using one of the following:
 6. Click **Create** to complete the application creation process.
 
 For more details, see the [Eclipse IDE for ModusToolbox&trade; software user guide](https://www.infineon.com/MTBEclipseIDEUserGuide) (locally available at *{ModusToolbox&trade; software install directory}/docs_{version}/mt_ide_user_guide.pdf*).
-
-**Note:** If Project Creator displays errors/warnings like shown in the following image, you can ignore these errors and close Project Creator. The project will be created successfully:
-
-```
-ERROR:/bin/bash: - : syntax error: operand expected (error token is "- "))
-```
-
-![](images/error.png)
 
 </details>
 
@@ -287,52 +283,16 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
 
    Target      | Supported JSON files
    ----------- |----------------------------------
-   CY8CPROTO-062-4343W <br> CY8CKIT-062S2-43012  | Both targets support the following flashmaps: <br> *psoc62_swap_single.json* <br> *psoc62_swap_single_smif.json* <br> *psoc62_overwrite_single.json* <br> *psoc62_overwrite_single_smif.json*
+   CY8CPROTO-062-4343W <br> CY8CKIT-062S2-43012  | Both targets support the following flashmaps: <br> *psoc62_swap_single.json* <br> *psoc62_swap_single_smif.json* (Default)<br> *psoc62_overwrite_single.json* <br> *psoc62_overwrite_single_smif.json*
+   CY8CEVAL-062S2-LAI-4373M2  | *psoc62_swap_single_smif.json* (Default)<br> *psoc62_overwrite_single_smif.json*
 
    <br>
 
 3. Modify the value of the `FLASH_MAP` variable in *\<bootloader_cm0p>/shared_config.mk* to the selected JSON file name from the previous step.
 
-4. Build and program the bootloader application.
+4. Set up the MQTT broker and connect the publisher client to the broker from [Setting up the local MQTT mosquitto broker](#setting-up-the-local-mqtt-mosquitto-broker) and [Setting up the MQTT publisher script](#setting-up-the-mqtt-publisher-script) to connect the publisher client to the MQTT broker.
 
-   - **Using Eclipse IDE for ModusToolbox&trade; software:**
-
-      1. Select the *bootloader_cm0p* application in the Project Explorer.
-
-      2. Open the Makefile and change `EN_XMEM_PROG=1` to enable external memory programming abilities in the bootloader. See [PSoC&trade; 6 programming specifications](https://www.infineon.com/dgdl/Infineon-PSoC_6_Programming_Specifications-Programming+Specifications-v12_00-EN.pdf?fileId=8ac78c8c7d0d8da4017d0f66d9bf5627) for more details.
-
-      3. In the **Quick Panel**, scroll down, and click **\<Application Name> Program (KitProg3)**.
-
-   - **Using CLI:**
-
-     From the terminal, export by running the following command to enable the external memory programming abilities in the bootloader.
-
-     ```
-     export EN_XMEM_PROG=1
-     ```
-
-     Go to the *bootloader_cm0p* directory and execute the `make program_proj` command to build and program the application using the default toolchain to the default target.
-
-     You can specify a target and toolchain manually using the following command:
-      ```
-      make program_proj TARGET=<BSP> TOOLCHAIN=<toolchain>
-      ```
-
-      Example:
-      ```
-      make program_proj TARGET=CY8CPROTO-062-4343W TOOLCHAIN=GCC_ARM
-      ```
-     After programming, the *bootloader* application starts automatically. Confirm that the UART terminal displays the following message.
-
-     Note that both secondary and external memory slots do not contain any valid image at this stage.
-
-     **Figure 1. Bootloader starting with no bootable image**
-
-     ![](images/booting-with-no-bootable-image.png)
-
-5. Set up the MQTT broker and connect the publisher client to the broker from [Setting up the local MQTT mosquitto broker](#setting-up-the-local-mqtt-mosquitto-broker) and [Setting up the MQTT publisher script](#setting-up-the-mqtt-publisher-script) to connect the publisher client to the MQTT broker.
-
-6. Edit the *\<Factory App>/source/ota_app_config.h* file to configure your *factory_app_cm4* image:
+5. Edit the *\<Factory App>/source/ota_app_config.h* file to configure your *factory_app_cm4* image:
 
     1. Modify the connection configuration `WIFI_SSID`, `WIFI_PASSWORD`, and `WIFI_SECURITY` macros to match the settings of your Wi-Fi network. Make sure that the device running the MQTT broker and the kit are connected to the same network.
 
@@ -358,7 +318,7 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
          ```
     7. Copy the generated strings and add it to the `ROOT_CA_CERTIFICATE`, `CLIENT_CERTIFICATE`, and `CLIENT_KEY` macros per the sample shown in the *ota_app_config.h* file.
 
-7. Edit the job document (*\<OTA Application>/scripts/ota_update.json*):
+6. Edit the job document (*\<OTA Application>/scripts/ota_update.json*):
 
     1. Modify the value of `Broker` to match the IP address of your MQTT broker.
 
@@ -366,18 +326,42 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
 
     3. In Step 6, if the code example has been configured to work in non-TLS mode, set the value of `Port` to `1883`.
 
-8. Build and program the factory application to the external flash.
+7. Build and program the bootloader application to the internal flash and factory application to the external flash.
 
-   <details><summary><b>Using Eclipse IDE for ModusToolbox&trade; software</b></summary>
+   <details><summary><b>Using Eclipse IDE for ModusToolbox&trade; software:</b></summary>
 
-      1. Select the application project in the Project Explorer.
+      1. Select the *bootloader_cm0p* application in the Project Explorer.
 
-      2. In the **Quick Panel**, scroll down, and click **\<Application Name> Program (KitProg3_MiniProg4)**.
+      2. Open the Makefile and change `EN_XMEM_PROG=1` to enable external memory programming abilities in the bootloader. See [PSoC&trade; 6 programming specifications](https://www.infineon.com/dgdl/Infineon-PSoC_6_Programming_Specifications-Programming+Specifications-v12_00-EN.pdf?fileId=8ac78c8c7d0d8da4017d0f66d9bf5627) for more details.
+
+      3. In the **Quick Panel**, scroll down, and click **\<Application Name> Program (KitProg3_MiniProg4)**.
    </details>
 
-   <details><summary><b>Using CLI</b></summary>
+   <details><summary><b>Using CLI:</b></summary>
 
-     From the terminal, execute the `make program_proj` command to build and program the application using the default toolchain to the default target. You can specify a target and toolchain manually:
+   - **Bootloader application using CLI:**
+
+     1. From the terminal, export by running the following command to enable the external memory programming abilities in the bootloader.
+
+        ```
+        export EN_XMEM_PROG=1
+        ```
+
+     2. Go to the *bootloader_cm0p* directory and execute the `make program_proj` command to build and program the bootloader application using the default toolchain to the default target.
+
+     You can specify a target and toolchain manually using the following command:
+        ```
+        make program_proj TARGET=<BSP> TOOLCHAIN=<toolchain>
+        ```
+
+        Example:
+        ```
+        make program_proj TARGET=CY8CPROTO-062-4343W TOOLCHAIN=GCC_ARM
+        ```
+
+   - **Factory app using CLI:**
+
+      Go to the *factory_app_cm4* directory and execute the `make program_proj` command to build and program the factory app using the default toolchain to the default target. You can specify a target and toolchain manually:
       ```
       make program_proj TARGET=<BSP> TOOLCHAIN=<toolchain>
       ```
@@ -386,11 +370,17 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
       ```
       make program_proj TARGET=CY8CPROTO-062-4343W TOOLCHAIN=GCC_ARM
       ```
+      **Note:** You can use DAPLink to program the external memory if you haven't enabled `EN_XMEM_PROG`. For  details, see [ExternalMemory.md](https://github.com/mcu-tools/mcuboot/blob/master/boot/cypress/MCUBootApp/ExternalMemory.md).
+
    </details>
 
-    **Note:** You can use DAPLink to program the external memory if you haven't enabled `EN_XMEM_PROG`. For  details, see [ExternalMemory.md](https://github.com/mcu-tools/mcuboot/blob/master/boot/cypress/MCUBootApp/ExternalMemory.md).
+   After programming, the *bootloader* application starts automatically. Confirm that the UART terminal displays the following message.
 
-9. Initiate rollback to the factory app.
+   **Figure 1. Bootloader starting with no bootable image**
+
+   ![](images/booting-with-no-bootable-image.png)
+
+8. Initiate rollback to the factory app.
 
    At this point, both the primary and secondary slots are empty. The bootloader reports that both slots are empty and waits for the user's action, as shown in Figure 1.
 
@@ -402,7 +392,7 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
 
    ![](images/roll-back-when-both-slots-are-empty.png)
 
-8. Build the Blinky application in UPGRADE mode (**DO NOT** program it to the kit).
+9. Build the Blinky application in UPGRADE mode (**DO NOT** program it to the kit).
 
    <details><summary><b>Using Eclipse IDE for ModusToolbox&trade; software</b></summary>
 
@@ -410,7 +400,7 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
 
       1. Select the `blinky_cm4` application in the Project Explorer.
 
-      2. In the **Quick Panel**, scroll down, and click **\<Application Name> Build (KitProg3)**.
+      2. In the **Quick Panel**, scroll down, and click **\<Application Name> Build Application**.
 
    </details>
 
@@ -427,13 +417,13 @@ The *bootloader_cm0p* app design is based on MCUboot, which uses the [imgtool](h
       ```
    </details>
 
-      **Note:** The binary file *<APPNAME>.bin* generated at the end of a successful build will be used in subsequent steps for OTA upgrade.
+      **Note:** The *<APPNAME>.bin* binary file generated at the end of a successful build will be used in subsequent steps for OTA upgrade.
 
-11. Download the Blinky application to the bootloader's secondary slot (using the OTA capabilities of the factory application).
+10. Download the Blinky application to the bootloader's secondary slot (using the OTA capabilities of the factory application).
 
     After a successful build, edit the *<factory_app_cm4>/scripts/ota_update.json* file to modify the value of version to 1.1.0.
 
-    The factory application starts blinking the user LED at a 1-second interval on bootup and waits for the user button event to start the OTA upgrade process. Press and release the user button to start the OTA upgrade process.
+    The factory app starts blinking the user LED at a 1-second interval on bootup and waits for the user button event to start the OTA upgrade process. Press and release the user button to start the OTA upgrade process.
 
     When a user button press is detected, the device establishes a connection with the designated MQTT broker ([Eclipse Mosquitto](https://mosquitto.org/) is used in this example) and subscribes to a topic. When an OTA image is published to that topic, the device automatically pulls the OTA image over MQTT and saves it to the secondary slot.
 
@@ -484,7 +474,7 @@ The bootloader is designed based on the MCUboot repo in [GitHub](https://github.
 
 On bootup, the bootloader checks both primary and secondary slots and determines whether a valid image is present. If both slots are empty or invalid, the bootloader displays a message on the console that there are no valid images in either slot.
 
-You can press and release the user button to initiate the rollback as instructed in Step 9 (initiate rollback to the factory app) in the [Step-by-step instructions](#Step-by-step instructions) section.
+You can press and release the user button to initiate the rollback as instructed in Step 9 (initiate rollback to the factory app) in the [Step-by-step instructions](#step-by-step-instructions) section.
 
 #### **Rollback when primary slot is valid but secondary slot is invalid**
 
@@ -512,13 +502,15 @@ Figure 6 shows the console messages: messages in the highlighted text boxes indi
 
 ### Blinky app implementation
 
-This is a tiny application that simply blinks the user LED on startup. The LED blink interval is configured based on the `IMG_TYPE` specified. By default, `IMG_TYPE` is set to `UPGRADE` to generate suitable binaries for upgrade. The bootloader upgrade image is in overwrite mode in this case; the LED toggles at a 250-millisecond interval. The bootloader upgrade image is the swap mode upgrade image from the secondary slot into the primary slot and make it the primary image, enter **Y** in the UART terminal. To revert to the original image, enter **N**. Confirm that the user LED toggles at the 250-millisecond interval.
+This is a tiny application that simply blinks the user LED on startup. The LED blink interval is configured based on the `IMG_TYPE` specified. By default, `IMG_TYPE` is set to `UPGRADE` to generate suitable binaries for upgrade.
+
+The bootloader upgrade image is in overwrite mode in this case; the LED toggles at a 250-millisecond interval. The bootloader upgrade image is the swap mode upgrade image from the secondary slot into the primary slot and make it the primary image, enter **Y** in the UART terminal. To revert to the original image, enter **N**. Confirm that the user LED toggles at the 250-millisecond interval.
 
 The image will be signed using the keys available in *bootloader_cm0p/keys*. It is possible to build the Blinky application as a *BOOT* image and program it to the primary slot directly (not discussed in this document).
 
 ### Factory app implementation
 
-The factory application uses the [ota-update](https://github.com/Infineon/ota-update) middleware; it performs an OTA upgrade using the MQTT protocol. The application connects to the MQTT server and receives the OTA upgrade package, if available. The OTA upgrade image will be downloaded to the secondary slot of MCUboot in chunks. Once the complete image is downloaded, the application issues an MCU reset. On reset, the bootloader starts and handles the rest of the upgrade process.
+The factory app uses the [ota-update](https://github.com/Infineon/ota-update) middleware; it performs an OTA upgrade using the MQTT protocol. The application connects to the MQTT server and receives the OTA upgrade package, if available. The OTA upgrade image will be downloaded to the secondary slot of MCUboot in chunks. Once the complete image is downloaded, the application issues an MCU reset. On reset, the bootloader starts and handles the rest of the upgrade process.
 
 The factory app is signed using the keys available under *bootloader_cm0p/keys* to ensue that the bootloader boots it safely. This process detects malicious firmware or possible corruptions early in the boot process.
 
@@ -538,7 +530,7 @@ The development kit has a 2-MB internal flash and a 64-MB external flash, which 
 |Secondary partition  | 1792 KB | 952 KB | Partition where the downloaded OTA upgrade image will be placed. Secondary slot of *bootloader_cm0p*.
 |Scratch Region **          | 512 KB | 4 KB | Region used for swapping image. Only applicable when *swap* policy is used.
 |RFU                  | 160 KB | 44 KB | Region reserved for future use.
-|Factory app reserved | First 2 MB in external flash | First 1 MB in external flash | Region reserved for *factory_app_cm4*. Although the maximum size of the factory application cannot exceed the primary slot size, additional 72 KB (1 MB – 952 KB) is allocated to align with the erase sector size of the QSPI flash (S25FL512S).
+|Factory app reserved | First 2 MB in external flash | First 1 MB in external flash | Region reserved for *factory_app_cm4*. Although the maximum size of the factory app cannot exceed the primary slot size, additional 72 KB (1 MB – 952 KB) is allocated to align with the erase sector size of the QSPI flash (S25FL512S).
 |User region            | 60 MB | 63 MB | Region for application use.
 
 <br>
@@ -581,8 +573,8 @@ This section explains the important make variables that affect this code example
 
 | Variable             | Default value | Description            |
 | ---------------------| ------------- | ---------------------- |
-| `ERASED_VALUE`         | 0xff          | Factory Application is built for the external flash. Erase value of the external flash (S25FL512S) is 0xFF. Change this value as per your flash.
-| `HEADER_OFFSET`        | 0x7FE8000     | Starting address of the CM4 app or the offset at which the header of an image will begin. Image = Header + App + TLV + Trailer. <br>New relocated address = `ORIGIN` + `HEADER_OFFSET`<br>`ORIGIN` is defined in the CM4 linker script and is usually the address next to the end of the CM0+ image. <br>See the table below for the values of `HEADER_OFFSET` for the default flash map. |
+| `ERASED_VALUE`         | 0xff          | The factory app is built for the external flash. Erase value of the external flash (S25FL512S) is 0xFF. Change this value as per your flash.
+| `HEADER_OFFSET`        | 0x7FE8000     | Starting address of the CM4 app or the offset at which the header of an image will begin. *Image = Header + App + TLV + Trailer*. <br>New relocated address = `ORIGIN` + `HEADER_OFFSET`<br>`ORIGIN` is defined in the CM4 linker script and is usually the address next to the end of the CM0+ image. <br>See the table below for the values of `HEADER_OFFSET` for the default flash map. |
 | `USE_OVERWRITE`              | Autogenerated       | Value is '1' when scratch and status partitions are not defined in the flashmap JSON file.
  `USE_EXTERNAL_FLASH`         | Autogenerated       | Value is '1' when an external flash is used for either primary or secondary slot.
  `KEY_FILE_PATH` | *../bootloader_cm0p/keys* | Path to the private key file. Used with the *imgtool* for signing the image.
@@ -681,6 +673,7 @@ Document title: *CE230815* – *PSoC&trade; 6 MCU: MCUboot-based bootloader with
  2.1.0   | Updated to support ModusToolbox™ software v2.4 <br>Fixed minor bugs
  3.0.0   | Updates the example to use mcuboot v1.8.1 and ota-update v2.0.0 library <br> Updated to support ModusToolbox™ software v3.0
  3.1.0   | Fixed minor bugs
+ 4.0.0   | Added support for the CY8CEVAL-062S2-LAI-4373M2 KIT
 
 <br>
 

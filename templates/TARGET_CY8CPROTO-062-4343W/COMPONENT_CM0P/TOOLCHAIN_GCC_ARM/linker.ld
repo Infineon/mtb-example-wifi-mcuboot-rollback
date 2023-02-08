@@ -1,7 +1,6 @@
-
 /***************************************************************************//**
 * \file cy8c6xxa_cm0plus.ld
-* \version 2.80
+* \version 2.95.1
 *
 * Linker file for the GNU C compiler.
 *
@@ -20,7 +19,7 @@
 *
 ********************************************************************************
 * \copyright
-* Copyright 2016-2020 Cypress Semiconductor Corporation
+* Copyright 2016-2021 Cypress Semiconductor Corporation
 * SPDX-License-Identifier: Apache-2.0
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
@@ -69,6 +68,14 @@ MEMORY
      */
     ram               (rwx)   : ORIGIN = 0x08000000, LENGTH = CM0P_RAM_SIZE
     flash             (rx)    : ORIGIN = 0x10000000, LENGTH = CM0P_FLASH_SIZE
+
+
+    /* This is an unprotected public RAM region, with the placed .cy_sharedmem.
+     * This region is used to place objects that require full access from both cores.
+     * Uncomment the following line, define the region origin and length, and uncomment the placement of
+     * the .cy_sharedmem section below.
+     */
+    /* public_ram        (rw)    : ORIGIN = %REGION_START_ADDRESS%, LENGTH = %REGION_SIZE% */
 
     /* This is a 32K flash region used for EEPROM emulation. This region can also be used as the general purpose flash.
      * You can assign sections to this memory region for only one of the cores.
@@ -229,8 +236,9 @@ SECTIONS
     } > ram
 
 
-    .data __ram_vectors_end__ : AT (__etext)
+    .data __ram_vectors_end__ :
     {
+        . = ALIGN(4);
         __data_start__ = .;
 
         *(vtable)
@@ -264,7 +272,7 @@ SECTIONS
 
         __data_end__ = .;
 
-    } > ram
+    } > ram AT>flash
 
 
     /* Place variables in the section that should not be initialized during the
@@ -309,6 +317,18 @@ SECTIONS
         __HeapLimit = .;
     } > ram
 
+
+    /* To use unprotected public RAM, uncomment the following .cy_sharedmem section placement.*/
+    /*
+    .cy_sharedmem (NOLOAD):
+    {
+        . = ALIGN(4);
+        __public_ram_start__ = .;
+        KEEP(*(.cy_sharedmem))
+        . = ALIGN(4);
+        __public_ram_end__ = .;
+    } > public_ram
+    */
 
     /* .stack_dummy section doesn't contains any symbols. It is only
      * used for linker to calculate size of stack sections, and assign
@@ -374,9 +394,11 @@ SECTIONS
     /* Places the code in the Execute in Place (XIP) section. See the smif driver
     *  documentation for details.
     */
-    .cy_xip :
+    cy_xip :
     {
+        __cy_xip_start = .;
         KEEP(*(.cy_xip))
+        __cy_xip_end = .;
     } > xip
 
 

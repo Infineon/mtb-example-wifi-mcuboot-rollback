@@ -9,7 +9,7 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company)
+# Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@
 ################################################################################
 
 # Flashmap JSON file name
-FLASH_MAP=psoc62_swap_single.json
+FLASH_MAP=psoc62_swap_single_smif.json
 
 # Device family name. Ex: PSOC6, CYW20289
 FAMILY=PSOC6
@@ -64,7 +64,7 @@ MCUBOOT_HEADER_SIZE=0x400
 
 # Define the size of the external flash based on target
 # Print error for Targets, which are not supported by this example.
-ifeq ($(TARGET), $(filter $(TARGET),  CY8CPROTO-062-4343W-NEW APP_CY8CPROTO-062-4343W-NEW CY8CPROTO-062-4343W CY8CKIT-062S2-43012 APP_CY8CPROTO-062-4343W APP_CY8CKIT-062S2-43012))
+ifeq ($(TARGET), $(filter $(TARGET),  CY8CPROTO-062-4343W-NEW APP_CY8CPROTO-062-4343W-NEW CY8CPROTO-062-4343W CY8CKIT-062S2-43012 APP_CY8CPROTO-062-4343W APP_CY8CKIT-062S2-43012 CY8CEVAL-062S2-LAI-4373M2 APP_CY8CEVAL-062S2-LAI-4373M2))
 EXTERNAL_FLASH_SIZE=0x4000000
 else
 $(error TARGET $(TARGET) not supported)

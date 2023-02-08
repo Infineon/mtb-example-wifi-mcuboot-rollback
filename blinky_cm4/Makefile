@@ -7,7 +7,7 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2018-2022, Cypress Semiconductor Corporation (an Infineon company)
+# Copyright 2018-2023, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,14 +47,6 @@ VERBOSE=
 # Include the application make files
 include ../bootloader_cm0p/shared_config.mk
 
-# factory_app size should be defined based on the external memory erase sector size
-# considering 0x40000 sector size, allocating 4 sectors (1MB) for the factory-image.
-ifeq ($(USE_EXTERNAL_FLASH), 1)
-FACT_APP_SIZE=0x200000
-else
-FACT_APP_SIZE=0x100000
-endif
-
 # Python path definition
 ifeq ($(OS),Windows_NT)
 PYTHON_PATH?=python
@@ -76,6 +68,14 @@ generate_flashmap_cm4:
 -include ./flashmap.mk
 endif
 
+# factory_app size should be defined based on the external memory erase sector size
+# considering 0x40000 sector size, allocating 4 sectors (1MB) for the factory-image.
+ifeq ($(USE_EXTERNAL_FLASH), 1)
+FACT_APP_SIZE=0x200000
+else
+FACT_APP_SIZE=0x100000
+endif
+
 # Supported values: BOOT, UPGRADE
 # The Blinky app defines the LED period differently depending on whether the
 # image is BOOT or UPGRADE. 
@@ -90,7 +90,9 @@ IMG_TYPE ?= UPGRADE
 # details. 
 # New relocated address = ORIGIN + HEADER_OFFSET
 ifeq ($(IMG_TYPE), UPGRADE)
+ifneq (,$(SECONDARY_IMG_START)$(PRIMARY_IMG_START))
 HEADER_OFFSET ?= $(shell expr $$(( $(SECONDARY_IMG_START) - $(PRIMARY_IMG_START) )) )
+endif
 else
 HEADER_OFFSET ?= 0
 endif
@@ -293,7 +295,7 @@ cp -f $(BINARY_OUT_PATH).hex $(BINARY_OUT_PATH)_raw.hex;\
 $(CY_ELF_TO_HEX_TOOL) --change-addresses=$(HEADER_OFFSET) $(CY_ELF_TO_HEX_OPTIONS) $(BINARY_OUT_PATH).elf $(BINARY_OUT_PATH)_unsigned.hex;\
 $(PYTHON_PATH) $(IMGTOOL_PATH) $(SIGN_ARGS) $(BINARY_OUT_PATH)_unsigned.hex $(BINARY_OUT_PATH)_signed.hex;\
 cp -f $(BINARY_OUT_PATH)_signed.hex $(BINARY_OUT_PATH).hex;\
-$(CY_ELF_TO_HEX_TOOL) --input-target=ihex --output-target=binary $(BINARY_OUT_PATH).hex $(BINARY_OUT_PATH).bin
+$(CY_ELF_TO_HEX_TOOL) --input-target=ihex --output-target=binary $(BINARY_OUT_PATH).hex $(BINARY_OUT_PATH).bin;
 
 ################################################################################
 # Paths

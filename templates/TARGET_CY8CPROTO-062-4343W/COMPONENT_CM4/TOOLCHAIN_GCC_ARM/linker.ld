@@ -1,6 +1,6 @@
 /***************************************************************************//**
-* \file cy8c6xxa_cm4.ld
-* \version 2.80
+* \file cy8c6xxa_cm4_dual.ld
+* \version 2.95.1
 *
 * Linker file for the GNU C compiler.
 *
@@ -19,7 +19,7 @@
 *
 ********************************************************************************
 * \copyright
-* Copyright 2016-2020 Cypress Semiconductor Corporation
+* Copyright 2016-2021 Cypress Semiconductor Corporation
 * SPDX-License-Identifier: Apache-2.0
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
@@ -226,8 +226,9 @@ SECTIONS
     } > ram
 
 
-    .data __ram_vectors_end__ : AT (__etext)
+    .data __ram_vectors_end__ :
     {
+        . = ALIGN(4);
         __data_start__ = .;
 
         *(vtable)
@@ -261,7 +262,7 @@ SECTIONS
 
         __data_end__ = .;
 
-    } > ram
+    } > ram AT>flash
 
 
     /* Place variables in the section that should not be initialized during the
@@ -328,7 +329,7 @@ SECTIONS
 
     /* Used for the digital signature of the secure application and the Bootloader SDK application.
     * The size of the section depends on the required data size. */
-    .cy_app_signature ORIGIN(flash) +  - 256 :
+    .cy_app_signature ORIGIN(flash) + LENGTH(flash) - 256 :
     {
         KEEP(*(.cy_app_signature))
     } > flash
@@ -374,6 +375,17 @@ SECTIONS
     {
         KEEP(*(.cy_rtoc_part2))
     } > sflash_rtoc_2
+
+
+    /* Places the code in the Execute in Place (XIP) section. See the smif driver
+    *  documentation for details.
+    */
+    cy_xip :
+    {
+        __cy_xip_start = .;
+        KEEP(*(.cy_xip))
+        __cy_xip_end = .;
+    } > xip
 
 
     /* eFuse */

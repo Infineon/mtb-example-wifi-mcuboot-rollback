@@ -57,7 +57,7 @@ If you do not upgrade, you will see an error like "unable to find CMSIS-DAP devi
 
 1. Install a terminal emulator if you do not have one. Instructions in this document use [Tera Term](https://ttssh2.osdn.jp/index.html.en).
 
-2. Install a Python interpreter. This code example is tested with [Python 3.8.3](https://www.python.org/downloads/release/python-383/).
+2. Install the Python interpreter and add it to the top of the system path in environmental variables. This This code example is tested with [Python v3.8](https://www.python.org/downloads/release/python-383/).
 
 ## Using the code example
 
@@ -674,6 +674,7 @@ Document title: *CE230815* – *PSoC&trade; 6 MCU: MCUboot-based bootloader with
  3.0.0   | Updates the example to use mcuboot v1.8.1 and ota-update v2.0.0 library <br> Updated to support ModusToolbox™ software v3.0
  3.1.0   | Fixed minor bugs
  4.0.0   | Added support for the CY8CEVAL-062S2-LAI-4373M2 KIT
+ 4.0.1   | Minor Makefile changes
 
 <br>
 

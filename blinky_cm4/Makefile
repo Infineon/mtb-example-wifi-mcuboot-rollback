@@ -47,12 +47,7 @@ VERBOSE=
 # Include the application make files
 include ../bootloader_cm0p/shared_config.mk
 
-# Python path definition
-ifeq ($(OS),Windows_NT)
-PYTHON_PATH?=python
-else
-PYTHON_PATH?=python3
-endif
+CY_PYTHON_REQUIREMENT=true
 
 .PHONY: generate_flashmap_cm4
 
@@ -62,7 +57,7 @@ generate_flashmap_cm4:
 	@echo -e "\n==============================================================================================================================================================="
 	@echo -e "= Generating flashmap.mk ="
 	@echo -e "==============================================================================================================================================================="
-	$(PYTHON_PATH) ../bootloader_cm0p/scripts/flashmap.py -p $(PLATFORM) -i ../bootloader_cm0p/flashmap/$(FLASH_MAP) -o ./source/cy_flash_map.h -d 1 > ./flashmap.mk
+	$(CY_PYTHON_PATH) ../bootloader_cm0p/scripts/flashmap.py -p $(PLATFORM) -i ../bootloader_cm0p/flashmap/$(FLASH_MAP) -o ./source/cy_flash_map.h -d 1 > ./flashmap.mk
 	@echo -e "===============================================================================================================================================================\n"
     
 -include ./flashmap.mk
@@ -271,12 +266,7 @@ else
 endif
 endif
 
-# Python path definition
-ifeq ($(OS),Windows_NT)
-PYTHON_PATH?=python
-else
-PYTHON_PATH?=python3
-endif
+CY_PYTHON_REQUIREMENT=true
 
 PREBUILD_VAR=+\
 $(MAKE) generate_flashmap_cm4;\
@@ -293,7 +283,7 @@ PREBUILD=$(PREBUILD_VAR)
 POSTBUILD=\
 cp -f $(BINARY_OUT_PATH).hex $(BINARY_OUT_PATH)_raw.hex;\
 $(CY_ELF_TO_HEX_TOOL) --change-addresses=$(HEADER_OFFSET) $(CY_ELF_TO_HEX_OPTIONS) $(BINARY_OUT_PATH).elf $(BINARY_OUT_PATH)_unsigned.hex;\
-$(PYTHON_PATH) $(IMGTOOL_PATH) $(SIGN_ARGS) $(BINARY_OUT_PATH)_unsigned.hex $(BINARY_OUT_PATH)_signed.hex;\
+$(CY_PYTHON_PATH) $(IMGTOOL_PATH) $(SIGN_ARGS) $(BINARY_OUT_PATH)_unsigned.hex $(BINARY_OUT_PATH)_signed.hex;\
 cp -f $(BINARY_OUT_PATH)_signed.hex $(BINARY_OUT_PATH).hex;\
 $(CY_ELF_TO_HEX_TOOL) --input-target=ihex --output-target=binary $(BINARY_OUT_PATH).hex $(BINARY_OUT_PATH).bin;
 

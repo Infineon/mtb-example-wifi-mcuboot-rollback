@@ -3,11 +3,11 @@
 *
 * Description:
 *  This is the source code for the CE230815.
-*  "PSoC 6 MCU: MCUboot-Based Bootloader with Rollback to Factory App in External Flash"
+*  "PSOC 6 MCU: MCUboot-based Bootloader with Rollback to Factory App in External Flash"
 *  This factory app will be placed into external flash and later the bootloader
 *  copies it to the primary slot in internal flash, based on user input.
 *  This factory app is designed to receive user input (user button presses) and
-*  initiate OTA using AnyClould OTA middleware. When OTA is initiated, the device
+*  initiate OTA using OTA middleware. When OTA is initiated, the device
 *  establishes a connection with the designated MQTT Broker and subscribes to a topic.
 *  When an OTA image is published to that topic, the device automatically pulls
 *  the OTA image over MQTT and saves it to the secondary slot in internal flash.
@@ -18,7 +18,7 @@
 *
 *
 *******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -63,6 +63,17 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
+
+/*******************************************************************************
+* Macros
+********************************************************************************/
+#define VERSION_MESSAGE_VER         "[Factory App] Version:"
+
+#define IMAGE_TYPE_MESSAGE_VER      "IMAGE_TYPE:"
+
+#define CORE_NAME_MESSAGE_VER       "CPU:"
+
+
 /*******************************************************************************
 * Global Variables
 ********************************************************************************/
@@ -85,45 +96,36 @@ volatile int uxTopUsedPriority;
  *******************************************************************************/
 int main(void)
 {
-    cy_rslt_t result = CY_RSLT_SUCCESS;
-    cyhal_wdt_t wdt_obj;
+    cy_rslt_t result;
 
     /* Clear watchdog timer so that it doesn't trigger a reset */
-    cyhal_wdt_init(&wdt_obj, cyhal_wdt_get_max_timeout_ms());
-    cyhal_wdt_free(&wdt_obj);
+    cyhal_wdt_free(NULL);
 
     /* This enables RTOS aware debugging in OpenOCD */
     uxTopUsedPriority = configMAX_PRIORITIES - 1 ;
 
     /* Initialize the board support package */
     result = cybsp_init() ;
-    CY_ASSERT(result == CY_RSLT_SUCCESS);
-
-    /* Free the hardware instance object iff initialized by other core
-     * before initializing the same hardware instance object in this core. */
-    cyhal_hwmgr_free(&CYBSP_UART_obj);
-    cyhal_hwmgr_free(&CYBSP_DEBUG_UART_RX_obj);
-    cyhal_hwmgr_free(&CYBSP_DEBUG_UART_TX_obj);
+    if (CY_RSLT_SUCCESS != result)
+    {
+        CY_ASSERT(0);
+    }
 
     /* Initialize retarget-io to use the debug UART port */
     result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,
                                  CY_RETARGET_IO_BAUDRATE);
-    CY_ASSERT(result == CY_RSLT_SUCCESS);
-
-    /* To avoid compiler warning */
-    (void)result;
+    if (CY_RSLT_SUCCESS != result)
+    {
+        CY_ASSERT(0);
+    }
 
     /* Enable global interrupts. */
     __enable_irq();
 
-#ifdef DEBUG_PRINT
-    /* default for all loggings */
-    cy_log_init(CY_LOG_DEBUG, NULL, NULL);
-#endif
-
     printf("===============================================================\n");
-    printf("factory_app_cm4 version: %d.%d.%d\n",
-            APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD);
+    printf("%s%s %s%s %s%s\r", VERSION_MESSAGE_VER, IMG_VER_MSG,
+    IMAGE_TYPE_MESSAGE_VER, IMG_TYPE_MSG, CORE_NAME_MESSAGE_VER,
+    CORE_NAME_MSG);
     printf("===============================================================\n\n");
 
     printf("\nWatchdog timer started by the bootloader is now turned off!!!\n\n");

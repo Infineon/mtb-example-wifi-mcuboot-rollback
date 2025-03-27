@@ -7,7 +7,7 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2018-2023, Cypress Semiconductor Corporation (an Infineon company)
+# Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,8 @@
 # limitations under the License.
 ################################################################################
 
-include ../common.mk
+# Include the user configuration makefile
+include ../user_config.mk
 
 ################################################################################
 # Basic Configuration
@@ -40,97 +41,107 @@ APPNAME=blinky_cm4
 # If set to "true" or "1", display full command-lines when building.
 VERBOSE=
 
+# Add additional defines to the build process (without a leading -D).
+DEFINES=
+
 ################################################################################
 # MCUboot Specific Configuration
 ###############################################################################
 
-# Include the application make files
-include ../bootloader_cm0p/shared_config.mk
-
-CY_PYTHON_REQUIREMENT=true
-
-.PHONY: generate_flashmap_cm4
-
 # Python command to generate flashmap header file from flashmap JSON file
 ifneq ($(FLASH_MAP), )
-generate_flashmap_cm4:
-	@echo -e "\n==============================================================================================================================================================="
-	@echo -e "= Generating flashmap.mk ="
-	@echo -e "==============================================================================================================================================================="
-	$(CY_PYTHON_PATH) ../bootloader_cm0p/scripts/flashmap.py -p $(PLATFORM) -i ../bootloader_cm0p/flashmap/$(FLASH_MAP) -o ./source/cy_flash_map.h -d 1 > ./flashmap.mk
-	@echo -e "===============================================================================================================================================================\n"
-    
--include ./flashmap.mk
+.PHONY: FORCE
+memorymap.mk: FORCE
+	@echo -e "\n============================================================="
+	@echo -e "= Generating memorymap.h, memorymap.c and memorymap.mk ="
+	@echo -e "==============================================================="
+	$(if $(SEARCH_core-make),$(CY_PYTHON_PATH),true) ../scripts/memorymap.py -p $(PLATFORM) -m -i ../flashmap/$(FLASH_MAP) -o ./source/memorymap.c -a ./source/memorymap.h -d $(IMG_ID) > ./memorymap.mk.tmp
+	@if ! cmp -s "memorymap.mk.tmp" "memorymap.mk"; then \
+		mv -f "memorymap.mk.tmp" "memorymap.mk"; \
+	else \
+		rm -f "memorymap.mk.tmp"; \
+	fi
+	@echo -e "===============================================================\n"
+
+-include memorymap.mk
+DEFINES+=CY_FLASH_MAP_JSON
 endif
 
-# factory_app size should be defined based on the external memory erase sector size
-# considering 0x40000 sector size, allocating 4 sectors (1MB) for the factory-image.
-ifeq ($(USE_EXTERNAL_FLASH), 1)
-FACT_APP_SIZE=0x200000
-else
-FACT_APP_SIZE=0x100000
+# Include the common library make file
+include ../common_libs.mk
+
+# use USE_OVERWRITE = 1 for overwrite only mode
+# use USE_OVERWRITE = 0 for swap upgrade mode
+ifeq ($(USE_OVERWRITE), )
+USE_OVERWRITE?=$(PLATFORM_DEFAULT_USE_OVERWRITE)
 endif
 
-# Supported values: BOOT, UPGRADE
-# The Blinky app defines the LED period differently depending on whether the
-# image is BOOT or UPGRADE. 
-# BOOT: Use when image is built for the primary slot. 
-#       --pad argument is not passed to the imgtool. 
-# UPGRADE: Use when image is built for secondary slot. 
-#          --pad argument is passed to the imgtool.
-IMG_TYPE ?= UPGRADE
-
-# Starting address of the CM4 app or the offset at which the header of an image
-# will begin. Image = Header + App + TLV + Trailer. See MCUboot documenation for
-# details. 
-# New relocated address = ORIGIN + HEADER_OFFSET
-ifeq ($(IMG_TYPE), UPGRADE)
-ifneq (,$(SECONDARY_IMG_START)$(PRIMARY_IMG_START))
-HEADER_OFFSET ?= $(shell expr $$(( $(SECONDARY_IMG_START) - $(PRIMARY_IMG_START) )) )
+# 1. Define the image type.
+# 2. Ignore the build directory(if any) of other build mode to avoid linker error.
+# 3. Disabling the encrypt image support while signing the boot image
+# 4. Add flag, if not using swap for upgrade
+ifeq ($(IMG_TYPE), BOOT)
+DEFINES+=BOOT_IMAGE
+CY_IGNORE+=build/UPGRADE
+ENC_IMG=0
+else ifeq ($(IMG_TYPE), UPGRADE)
+DEFINES+=UPGRADE_IMAGE
+CY_IGNORE+=build/BOOT
+DEFINES+=SWAP_DISABLED=$(USE_OVERWRITE)
 endif
-else
-HEADER_OFFSET ?= 0
-endif
-
-# Path of the key file passed as a parameter to the Python module "imgtool" for
-# signing the image. Name of the key file is set in bootloader_cm0p/shared_config.mk
-# as a common parameter to both the Bootloader app and Blinky app.
-KEY_FILE_PATH=../bootloader_cm0p/keys
 
 # Set the version of the app using the following three variables.
-# This version information is passed to the Python module "imgtool" while
-# signing the image in the post build step. Default values are set as follows.
+# This version information is passed to the Python module "imgtool" or "cysecuretools" while
+# signing the image in the post-build step. Default values are set as follows.
 ifeq ($(IMG_TYPE), BOOT)
-APP_VERSION_MAJOR ?= 1
-APP_VERSION_MINOR ?= 0
-APP_VERSION_BUILD ?= 0
-else
-ifeq ($(IMG_TYPE), UPGRADE)
-APP_VERSION_MAJOR ?= 2
-APP_VERSION_MINOR ?= 0
-APP_VERSION_BUILD ?= 0
+APP_VERSION_MAJOR?=1
+APP_VERSION_MINOR?=0
+APP_VERSION_BUILD?=0
+else ifeq ($(IMG_TYPE), UPGRADE)
+APP_VERSION_MAJOR?=2
+APP_VERSION_MINOR?=0
+APP_VERSION_BUILD?=0
+endif
+
+# Add flag to imgtool if not using swap for upgrade
+ifeq ($(USE_OVERWRITE), 1)
+UPGRADE_TYPE:=--overwrite-only
+DEFINES+=MCUBOOT_OVERWRITE_ONLY
+endif
+
+# Add image type, version and core name metadata to image
+IMG_VER_ARG=$(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_BUILD)
+DEFINES+=IMG_VER_MSG='"$(IMG_VER_ARG)"'
+DEFINES+=IMG_TYPE_MSG='"$(IMG_TYPE)"'
+DEFINES+=CORE_NAME_MSG='"$(CORE_NAME)"'
+
+# Override the value from memorymap.mk
+ifeq ($(USE_XIP), 0)
+ifeq ($(IMG_TYPE), BOOT)
+USE_EXTERNAL_FLASH=0
 endif
 endif
 
-#Ignore the build directory(if any) of other build mode to avoid linker error.
-ifeq ($(IMG_TYPE), BOOT)
-CY_IGNORE+=build/UPGRADE
-else
-ifeq ($(IMG_TYPE), UPGRADE)
-CY_IGNORE+=build/BOOT
+# Enable the external flash and XIP
+ifeq ($(USE_EXTERNAL_FLASH), 1)
+ifeq ($(USE_XIP), 1)
+DEFINES+=USE_XIP
+LD_SUFFIX=_xip
 endif
+DEFINES+=CY_BOOT_USE_EXTERNAL_FLASH
+endif
+
+# Flash erase value
+# Possible values are 0 and 0xff
+ifeq ($(USE_EXTERNAL_FLASH), 1)
+ERASED_VALUE=0xff
+else
+ERASED_VALUE=0
 endif
 
 ################################################################################
 # Advanced Configuration
 ################################################################################
-
-# Include the mtb.mk file
--include ./libs/mtb.mk
-
-MCUBOOT_CY_PATH=$(SEARCH_mcuboot)/boot/cypress
-MCUBOOTAPP_PATH=$(MCUBOOT_CY_PATH)/MCUBootApp
-MBEDTLS_PATH=$(SEARCH_mcuboot)/ext/mbedtls
 
 # Enable optional code that is ordinarily disabled by default.
 #
@@ -145,48 +156,48 @@ MBEDTLS_PATH=$(SEARCH_mcuboot)/ext/mbedtls
 COMPONENTS=
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
-DISABLE_COMPONENTS=
+DISABLE_COMPONENTS=CM0P_SLEEP CM0P_SECURE CM0P_CRYPTO CM0P_BLESS
 
-CORE=CM4
-CORE_NAME=CM4_0
+# Set this application to run at the CM4
+USER_APP_CORE=CM4
+USER_APP_CORE_ID=0
+
+CORE=$(USER_APP_CORE)
+CORE_NAME=$(USER_APP_CORE)_$(USER_APP_CORE_ID)
 
 # By default the build system automatically looks in the Makefile's directory
 # tree for source code and builds it. The SOURCES variable can be used to
 # manually add source code to the build process from a location not searched
 # by default, or otherwise not found by the build system.
-SOURCES+=$(wildcard $(SEARCH_mcuboot)/boot/bootutil/src/*.c)\
-         $(wildcard $(MCUBOOT_CY_PATH)/libs/watchdog/*.c)\
-         $(wildcard $(MCUBOOT_CY_PATH)/platforms/$(FAMILY)/img_confirm/*.c)
+# Include confirmation flag setting (img_ok) implementation
+ifeq ($(IMG_TYPE), UPGRADE)
+ifeq ($(USE_OVERWRITE), 0)
+SOURCES+=$(MCUBOOT_CY_PATH)/platforms/img_confirm/$(FAMILY)/set_img_ok.c
+INCLUDES+=$(MCUBOOT_CY_PATH)/platforms/img_confirm
+endif
+endif
 
-# Like SOURCES, but for include directories. Value should be paths to
-# directories (without a leading -I).
-INCLUDES+=$(SEARCH_mcuboot)/boot/bootutil/include\
-          $(SEARCH_mcuboot)/boot/bootutil/src\
-          $(MCUBOOT_CY_PATH)/cy_flash_pal\
-          $(MCUBOOT_CY_PATH)/cy_flash_pal/flash_psoc6/include\
-          $(MCUBOOT_CY_PATH)/cy_flash_pal/flash_psoc6/flash_qspi\
-          $(MCUBOOTAPP_PATH)\
-          $(MCUBOOTAPP_PATH)/config\
-          $(MBEDTLS_PATH)/include\
-          $(MCUBOOT_CY_PATH)/libs/watchdog
+# The following defines used for firmware upgrade
+DEFINES+=MCUBOOT_IMAGE_NUMBER=$(MCUBOOT_IMAGE_NUMBER)\
+         USER_APP_START=$(PRIMARY_IMG_START)\
+         USER_APP_SIZE=$(SLOT_SIZE)\
+         PRIMARY_IMG_START=$(PRIMARY_IMG_START)\
+         MEMORY_ALIGN=$(PLATFORM_MEMORY_ALIGN)\
+         PLATFORM_MAX_TRAILER_PAGE_SIZE=$(PLATFORM_MAX_TRAILER_PAGE_SIZE)\
+         APP_$(USER_APP_CORE)\
+         BOOT_$(USER_APP_CORE)\
+         APP_CORE_ID=$(USER_APP_CORE_ID)\
+         $(PLATFORM_DEFINES_APP)\
+         $(FAMILY)\
+         $(PLATFORM)
+
+DEFINES+=APP_VERSION_MAJOR=$(APP_VERSION_MAJOR)\
+         APP_VERSION_MINOR=$(APP_VERSION_MINOR)\
+         APP_VERSION_BUILD=$(APP_VERSION_BUILD)
 
 # Add additional defines to the build process (without a leading -D).
-DEFINES=CY_RETARGET_IO_CONVERT_LF_TO_CRLF $(PLATFORM)
-DEFINES+=APP_VERSION_MAJOR=$(APP_VERSION_MAJOR) \
-         APP_VERSION_MINOR=$(APP_VERSION_MINOR) \
-         APP_VERSION_BUILD=$(APP_VERSION_BUILD) \
-         FLASH_AREA_IMG_1_PRIMARY_SIZE=$(SLOT_SIZE) \
-         FLASH_AREA_IMG_1_SECONDARY_SIZE=$(SLOT_SIZE) \
-         FLASH_AREA_IMAGE_SCRATCH_SIZE=$(MCUBOOT_SCRATCH_SIZE) \
-         CY_FACT_APP_SIZE=$(FACT_APP_SIZE) \
-         USER_APP_START=$(PRIMARY_IMG_START) \
-         USER_APP_SIZE=$(SLOT_SIZE)
+DEFINES+=CY_RETARGET_IO_CONVERT_LF_TO_CRLF
 
-ifeq ($(USE_XIP), 1)
-DEFINES+=USE_XIP
-LD_SUFFIX=_xip
-endif
-         
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT=
 
@@ -209,82 +220,68 @@ CXXFLAGS=
 ASFLAGS=
 
 # Additional / custom linker flags.
-LDFLAGS=
+LDFLAGS+=-Wl,--defsym,MCUBOOT_HEADER_SIZE=$(MCUBOOT_HEADER_SIZE)
+LDFLAGS+=-Wl,--defsym,CM0P_RAM_SIZE=$(BOOTLOADER_APP_RAM_SIZE)
+LDFLAGS+=-Wl,--defsym,CM0P_FLASH_SIZE=$(BOOTLOADER_SIZE)
+LDFLAGS+=-Wl,--defsym,CM4_FLASH_SIZE=$(SLOT_SIZE)
+LDFLAGS+=-Wl,--defsym,CY_FACT_APP_SIZE=$(FACT_APP_SIZE)
+LDFLAGS+=-Wl,--defsym,CY_EXT_FLASH_SIZE=$(EXTERNAL_FLASH_SIZE)
 
 # Additional / custom libraries to link in to the application.
 LDLIBS=
 
-# Custom pre-build commands to run.
-PREBUILD=
-
-# Path to the linker script to use and other linker options.
-ifeq ($(TOOLCHAIN), GCC_ARM)
-LINKER_SCRIPT=$(wildcard ../bsps/TARGET_$(TARGET)/COMPONENT_CM4/TOOLCHAIN_$(TOOLCHAIN)/*cm4$(LD_SUFFIX).ld)
-LDFLAGS+=-Wl,--defsym=MCUBOOT_HEADER_SIZE=$(MCUBOOT_HEADER_SIZE)
-LDFLAGS+=-Wl,--defsym=CM0P_FLASH_SIZE=$(BOOTLOADER_SIZE)
-LDFLAGS+=-Wl,--defsym=CM0P_RAM_SIZE=$(BOOTLOADER_APP_RAM_SIZE)
-LDFLAGS+=-Wl,--defsym=CM4_FLASH_SIZE=$(SLOT_SIZE)
-LDFLAGS+=-Wl,--defsym=CY_FACT_APP_SIZE=$(FACT_APP_SIZE)
-LDFLAGS+=-Wl,--defsym=CY_EXT_FLASH_SIZE=$(EXTERNAL_FLASH_SIZE)
+# Path to the custom linker script to use and other linker options.
+LINKER_SCRIPT=$(wildcard ../bsps/TARGET_$(TARGET)/COMPONENT_$(USER_APP_CORE)/TOOLCHAIN_$(TOOLCHAIN)/linker$(LD_SUFFIX).ld)
 
 CY_ELF_TO_HEX_TOOL=$(MTB_TOOLCHAIN_GCC_ARM__BASE_DIR)/bin/arm-none-eabi-objcopy
 CY_ELF_TO_HEX_OPTIONS=-O ihex
-else
-$(error Only GCC_ARM is supported at this moment)
-endif
-
-ifeq ($(USE_EXTERNAL_FLASH), 1)
-ERASED_VALUE=0xff
-else
-ERASED_VALUE=0
-endif
-
-# add flag to imgtool if not using swap for upgrade
-ifeq ($(USE_OVERWRITE), 1)
-UPGRADE_TYPE:=--overwrite-only
-DEFINES+=SWAP_DISABLED=1
-else
-DEFINES+=SWAP_DISABLED=0
-endif
 
 # Set build directory for BOOT and UPGRADE images
 CY_BUILD_LOCATION=./build/$(IMG_TYPE)
 BINARY_OUT_PATH=$(CY_BUILD_LOCATION)/$(TARGET)/$(CONFIG)/$(APPNAME)
+
+# Imgtool path
 IMGTOOL_PATH=$(SEARCH_mcuboot)/scripts/imgtool.py
-CY_BUILD_VERSION=$(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_BUILD)
-SIGN_ARGS=sign --header-size $(MCUBOOT_HEADER_SIZE) --pad-header --align 1 -v $(CY_BUILD_VERSION) \
-               -S $(SLOT_SIZE) -M $(MAX_IMG_SECTORS) $(UPGRADE_TYPE) -R $(ERASED_VALUE) -k $(KEY_FILE_PATH)/$(SIGN_KEY_FILE).pem
 
+# Commands to sign the BOOT and UPGRADE images
+SIGN_ARGS=sign --header-size $(MCUBOOT_HEADER_SIZE) --pad-header --align 8 -M 512 -v $(IMG_VER_ARG)\
+               -d "($(IMG_ID),$(IMG_VER_ARG))" -S $(SLOT_SIZE) -R $(ERASED_VALUE) $(UPGRADE_TYPE) -k $(SIGN_KEY_FILE_PATH)/$(SIGN_KEY_FILE).pem
+
+# Starting address of the CM4 app or the offset at which the header of an image
+# will begin. Image = Header + App + TLV + Trailer. See MCUboot documentation for
+# details.
+# New relocated address = ORIGIN + HEADER_OFFSET
+# Padding the image for UPGRADE image.
 ifeq ($(IMG_TYPE), BOOT)
-    DEFINES+=BOOT_IMAGE
-else 
-ifeq ($(IMG_TYPE), UPGRADE)
-    DEFINES+=UPGRADE_IMAGE
-    SIGN_ARGS += --pad
-else
-    $(error Set IMG_TYPE to be either BOOT or UPGRADE)
-endif
+HEADER_OFFSET?=0
+HEX_START_ADDR?=$(PRIMARY_IMG_START)
+else ifeq ($(IMG_TYPE), UPGRADE)
+PSOC6_PLATFORM_SIGN_ARGS+= --pad
+HEADER_OFFSET?=$(shell expr $$(( $(SECONDARY_IMG_START) - $(PRIMARY_IMG_START) )) )
+HEX_START_ADDR?=$(SECONDARY_IMG_START)
 endif
 
-CY_PYTHON_REQUIREMENT=true
-
-PREBUILD_VAR=+\
-$(MAKE) generate_flashmap_cm4;\
-
-PREBUILD=$(PREBUILD_VAR)
+# Custom pre-build commands to run.
+PREBUILD=
 
 # Custom post-build commands to run.
 # 1. Take a backup of the original hex file (_raw.hex)
-# 2. Relocate the starting address based on HEADER_OFFSET (_unsigned.hex)
-# 3. Sign the image using imgtool (_signed.hex)
-# 4. Make a copy of the signed image into .hex file so that Eclipse and Make CLI
-# 5. Prepare .bin for OTA/upgrade
-#    can locate the file for programming. 
+# 2. Delete the original hex
+# 3. Relocate the starting address based on HEADER_OFFSET and also convert
+#    .elf to _unsigned.hex
+# 4. Sign the image using imgtool (.hex)
+#
+# Step 3 is done so that programmer tools can place the image directly into
+# secondary slot. This step is not required if an application (e.g. OTA) is
+# going to write the image into secondary slot.
+#
+# Note that the final file should be $(APPNAME).hex so that Eclipse and
+# Make CLI can locate the file for programming.
 POSTBUILD=\
 cp -f $(BINARY_OUT_PATH).hex $(BINARY_OUT_PATH)_raw.hex;\
+rm -f $(BINARY_OUT_PATH).hex;\
 $(CY_ELF_TO_HEX_TOOL) --change-addresses=$(HEADER_OFFSET) $(CY_ELF_TO_HEX_OPTIONS) $(BINARY_OUT_PATH).elf $(BINARY_OUT_PATH)_unsigned.hex;\
-$(CY_PYTHON_PATH) $(IMGTOOL_PATH) $(SIGN_ARGS) $(BINARY_OUT_PATH)_unsigned.hex $(BINARY_OUT_PATH)_signed.hex;\
-cp -f $(BINARY_OUT_PATH)_signed.hex $(BINARY_OUT_PATH).hex;\
+$(CY_PYTHON_PATH) $(IMGTOOL_PATH) $(SIGN_ARGS) $(BINARY_OUT_PATH)_unsigned.hex $(BINARY_OUT_PATH).hex;\
 $(CY_ELF_TO_HEX_TOOL) --input-target=ihex --output-target=binary $(BINARY_OUT_PATH).hex $(BINARY_OUT_PATH).bin;
 
 ################################################################################
@@ -308,11 +305,5 @@ CY_GETLIBS_SHARED_PATH=../..
 # Directory name of the shared repo location.
 #
 CY_GETLIBS_SHARED_NAME=mtb_shared
-
-# Absolute path to the compiler's "bin" directory.
-#
-# The default depends on the selected TOOLCHAIN (GCC_ARM uses the ModusToolbox
-# IDE provided compiler by default).
-CY_COMPILER_PATH=
 
 include $(CY_TOOLS_DIR)/make/start.mk

@@ -5,7 +5,7 @@
 *
 *
 *******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -98,7 +98,7 @@ void state_mgr_task_init(void)
 * Function Name: user_button_callback
 ********************************************************************************
 * Summary:
-*   User button callback, called from the interrupt context. 
+*   User button callback, called from the interrupt context.
 *
 * Parameters:
 *  void *handler_arg (unused)
@@ -110,12 +110,12 @@ static void user_button_callback(void *handler_arg, cyhal_gpio_event_t event)
     BaseType_t higher_priority_task_woken = pdFALSE;
 
     /* notify the task */
-      xTaskNotifyFromISR( state_mgr_task_handle,
-                          USER_EVENT_DETECT_FLAG,
-                          eSetBits,
-                          &higher_priority_task_woken );
+    xTaskNotifyFromISR( state_mgr_task_handle,
+                        USER_EVENT_DETECT_FLAG,
+                        eSetBits,
+                        &higher_priority_task_woken );
 
-       portYIELD_FROM_ISR( higher_priority_task_woken );
+    portYIELD_FROM_ISR( higher_priority_task_woken );
 }
 
 /*******************************************************************************
@@ -132,12 +132,16 @@ static void user_button_callback(void *handler_arg, cyhal_gpio_event_t event)
  *******************************************************************************/
 static void state_mgr(void *args)
 {
-    cy_rslt_t result = CY_RSLT_SUCCESS;
     BaseType_t event_result = pdFAIL;
     uint32_t notified_value = 0 ;
 
+    /* To avoid compiler warning. */
+    (void)args;
+
     /* Initialize the user button. */
-    result = cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT,
+    /* Note that here the return value may not be success as the same pin is
+    also enabled in the design.modus file */
+    cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT,
                     CYHAL_GPIO_DRIVE_PULLUP, CYBSP_BTN_OFF);
 
     /* Configure GPIO interrupt. */
@@ -148,11 +152,7 @@ static void state_mgr(void *args)
     cyhal_gpio_enable_event(CYBSP_USER_BTN, CYHAL_GPIO_IRQ_FALL,
                              USRBTN_INTERRUPT_PRIORITY, true);
 
-    /* To avoid compiler warning. */
-    (void)result;
-    (void)args;
-
-    printf("Starting LED task..\n");
+    printf("Starting LED task...\n");
 
     /* kick start the LED task. */
     led_task_init();
@@ -169,13 +169,13 @@ static void state_mgr(void *args)
 
         if( (event_result == pdPASS) && (notified_value && USER_EVENT_DETECT_FLAG) )
         {
-            printf("Detected user button event..\n");
+            printf("Detected user button event...\n");
             break;
         }
 
-    } while(1);
+    } while(true);
 
-    printf("Starting OTA task..\n");
+    printf("Starting OTA task...\n");
 
     /* start the OTA task */
     ota_task_init();

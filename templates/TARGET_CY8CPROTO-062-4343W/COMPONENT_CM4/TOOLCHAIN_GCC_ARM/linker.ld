@@ -46,7 +46,7 @@ STACK_SIZE = 0x1000;
 /* Size of RAM to be reserved for system use (at the end of RAM) */
 SYS_USE_RAM_SIZE = 0x800;
 
-/* Derive xip region size. */
+/* Derive XIP region size */
 XIP_REGION_SIZE = (0x0 + CY_EXT_FLASH_SIZE - CY_FACT_APP_SIZE);
 
 /* Force symbol to be entered in the output file as an undefined symbol. Doing
@@ -69,7 +69,7 @@ MEMORY
      * Your changes must be aligned with the corresponding memory regions for CM0+ core in 'xx_cm0plus.ld',
      * where 'xx' is the device group; for example, 'cy8c6xx7_cm0plus.ld'.
      */
-    ram               (rwx)   : ORIGIN = (0x08000000 + CM0P_RAM_SIZE), LENGTH = (0x100000 - SYS_USE_RAM_SIZE - CM0P_RAM_SIZE)
+    ram               (rwx)   : ORIGIN = (0x08000000 + CM0P_RAM_SIZE), LENGTH = (0x00100000 - SYS_USE_RAM_SIZE - CM0P_RAM_SIZE)
     flash             (rx)    : ORIGIN = (0x10000000 + CM0P_FLASH_SIZE), LENGTH = CM4_FLASH_SIZE
 
     /* This is a 32K flash region used for EEPROM emulation. This region can also be used as the general purpose flash.
@@ -77,17 +77,17 @@ MEMORY
      * Note some middleware (e.g. BLE, Emulated EEPROM) can place their data into this memory region.
      * Therefore, repurposing this memory region will prevent such middleware from operation.
      */
-    em_eeprom         (rx)    : ORIGIN = 0x14000000, LENGTH = 0x8000               /*  32 KB */
+    em_eeprom         (rx)    : ORIGIN = 0x14000000, LENGTH = 0x8000       /*  32 KB */
 
     /* The following regions define device specific memory regions and must not be changed. */
-    sflash_user_data  (rx)    : ORIGIN = 0x16000800, LENGTH = 0x800                /* Supervisory flash: User data */
-    sflash_nar        (rx)    : ORIGIN = 0x16001A00, LENGTH = 0x200                /* Supervisory flash: Normal Access Restrictions (NAR) */
-    sflash_public_key (rx)    : ORIGIN = 0x16005A00, LENGTH = 0xC00                /* Supervisory flash: Public Key */
-    sflash_toc_2      (rx)    : ORIGIN = 0x16007C00, LENGTH = 0x200                /* Supervisory flash: Table of Content # 2 */
-    sflash_rtoc_2     (rx)    : ORIGIN = 0x16007E00, LENGTH = 0x200                /* Supervisory flash: Table of Content # 2 Copy */
-    fact_res          (rx)    : ORIGIN = 0x18000000, LENGTH = CY_FACT_APP_SIZE     /* first few sectors for factory-image */
-    xip               (rx)    : ORIGIN = (0x18000000 + CY_FACT_APP_SIZE), LENGTH = XIP_REGION_SIZE /* XIP region */
-    efuse             (r)     : ORIGIN = 0x90700000, LENGTH = 0x100000             /*   1 MB */
+    sflash_user_data  (rx)    : ORIGIN = 0x16000800, LENGTH = 0x800        /* Supervisory flash: User data */
+    sflash_nar        (rx)    : ORIGIN = 0x16001A00, LENGTH = 0x200        /* Supervisory flash: Normal Access Restrictions (NAR) */
+    sflash_public_key (rx)    : ORIGIN = 0x16005A00, LENGTH = 0xC00        /* Supervisory flash: Public Key */
+    sflash_toc_2      (rx)    : ORIGIN = 0x16007C00, LENGTH = 0x200        /* Supervisory flash: Table of Content # 2 */
+    sflash_rtoc_2     (rx)    : ORIGIN = 0x16007E00, LENGTH = 0x200        /* Supervisory flash: Table of Content # 2 Copy */
+    fact_res          (rx)    : ORIGIN = 0x18000000, LENGTH = CY_FACT_APP_SIZE  /* First few sectors for factory-image */
+    xip               (rx)    : ORIGIN = (0x18000000 + CY_FACT_APP_SIZE), LENGTH = XIP_REGION_SIZE  /* XIP region */
+    efuse             (r)     : ORIGIN = 0x90700000, LENGTH = 0x100000     /*   1 MB */
 }
 
 /* Library configurations */

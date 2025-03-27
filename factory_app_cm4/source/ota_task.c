@@ -3,9 +3,8 @@
 *
 * Description: This file contains task and functions related to OTA operation.
 *
-*
-*******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+********************************************************************************
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -41,27 +40,19 @@
 #include "cyhal.h"
 #include "cybsp.h"
 #include "cy_retarget_io.h"
-#include "cy_log.h"
-
-/* Wi-Fi connection manager header files. */
+/* Wi-Fi connection manager */
 #include "cy_wcm.h"
-
 /* IoT SDK, Secure Sockets, and MQTT initialization */
 #include "cy_tcpip_port_secure_sockets.h"
-
-/* FreeRTOS header file */
+/* FreeRTOS */
 #include <FreeRTOS.h>
 #include <task.h>
-
+/* OTA app specific configuration */
+#include "ota_app_config.h"
 /* OTA API */
 #include "cy_ota_api.h"
-
-/* App specific configuration */
-#include "ota_app_config.h"
-
-#ifdef OTA_USE_EXTERNAL_FLASH
-#include "ota_serial_flash.h"
-#endif
+/* OTA storage api */
+#include "cy_ota_storage_api.h"
 
 /*******************************************************************************
 * Macros
@@ -71,7 +62,7 @@
 #define OTA_TASK_PRIORITY                   (configMAX_PRIORITIES - 3)
 
 /* MAX connection retries to join WI-FI AP */
-#define MAX_CONNECTION_RETRIES              (10u)
+#define MAX_CONNECTION_RETRIES              (10)
 
 /* Wait between connection retries */
 #define WIFI_CONN_RETRY_DELAY_MS            (500)
@@ -93,7 +84,6 @@ cy_ota_context_ptr ota_context;
 static TaskHandle_t ota_task_handle;
 
 /* Network parameters for OTA */
-/* Network parameters for OTA */
 cy_ota_network_params_t ota_network_params =
 {
     .mqtt =
@@ -112,10 +102,14 @@ cy_ota_network_params_t ota_network_params =
         {
             .root_ca = ROOT_CA_CERTIFICATE,
             .root_ca_size = sizeof(ROOT_CA_CERTIFICATE),
+        #if (USING_CLIENT_CERTIFICATE == true)
             .client_cert = CLIENT_CERTIFICATE,
             .client_cert_size = sizeof(CLIENT_CERTIFICATE),
+        #endif
+        #if (USING_CLIENT_KEY == true)
             .private_key = CLIENT_KEY,
             .private_key_size = sizeof(CLIENT_KEY),
+        #endif
         },
     #endif
         .awsIotMqttMode = AWS_IOT_MQTT_MODE
@@ -129,24 +123,22 @@ cy_ota_agent_params_t ota_agent_params =
 {
     .cb_func = ota_callback,
     .cb_arg = &ota_context,
-    .reboot_upon_completion = 1,
+    .reboot_upon_completion = 1, /* Reboot after completing OTA with success. */
     .validate_after_reboot = 1,
     .do_not_send_result = 1
 };
 
-
-/*******************************************************************************
- * Function Name: ota_task_init
- *******************************************************************************
- * Summary:
- *  Creates the OTA task.
- *
- *******************************************************************************/
-void ota_task_init(void)
+/* OTA storage interface callbacks */
+cy_ota_storage_interface_t ota_interfaces =
 {
-    xTaskCreate(ota_task, "OTA TASK", OTA_TASK_STACK_SIZE, NULL,
-                OTA_TASK_PRIORITY, &ota_task_handle);
-}
+   .ota_file_open            = cy_ota_storage_open,
+   .ota_file_read            = cy_ota_storage_read,
+   .ota_file_write           = cy_ota_storage_write,
+   .ota_file_close           = cy_ota_storage_close,
+   .ota_file_verify          = cy_ota_storage_verify,
+   .ota_file_validate        = cy_ota_storage_image_validate,
+   .ota_file_get_app_info    = cy_ota_storage_get_app_info
+};
 
 /*******************************************************************************
  * Function Name: ota_task
@@ -155,62 +147,49 @@ void ota_task_init(void)
  *  Task to initialize required libraries and start OTA agent.
  *
  * Parameters:
- *  *args : Task parameter defined during task creation (unused)
+ *  void *args : Task parameter defined during task creation (unused)
+ *
+ * Return:
+ *  void
+ *
  *******************************************************************************/
 static void ota_task(void *args)
 {
-#ifdef DEBUG_PRINT
-    /* default for OTA logging to NOTiCE */
-    cy_ota_set_log_level(CY_LOG_DEBUG);
-#endif
-
-#ifdef OTA_USE_EXTERNAL_FLASH
-    /* We need to init from every ext flash write
-     * See ota_serial_flash.h
-     */
-
-    /* initialize SMIF interface */
-    printf("call ota_smif_initialize()\n");
-    if (ota_smif_initialize() != CY_RSLT_SUCCESS)
+    /* initialize OTA storage */
+    if (CY_RSLT_SUCCESS != cy_ota_storage_init())
     {
-        printf("ERROR returned from ota_smif_initialize()!!!!!\n");
+        printf("\n Initializing ota storage failed.\n");
         CY_ASSERT(0);
     }
 
-#endif /* OTA_USE_EXTERNAL_FLASH */
-
     /* Connect to Wi-Fi AP */
-    if( connect_to_wifi_ap() != CY_RSLT_SUCCESS )
+    if(CY_RSLT_SUCCESS != connect_to_wifi_ap())
     {
         printf("\n Failed to connect to Wi-FI AP.\n");
         CY_ASSERT(0);
     }
 
     /* Initialize underlying support code that is needed for OTA and MQTT */
-    if (cy_awsport_network_init() != CY_RSLT_SUCCESS)
+    if (CY_RSLT_SUCCESS != cy_awsport_network_init())
     {
-        printf("\n Secure sockets initialization failed.\n");
+        printf("\n Initializing secure sockets failed.\n");
         CY_ASSERT(0);
     }
 
     /* Initialize the MQTT subsystem */
-    if (cy_mqtt_init() != CY_RSLT_SUCCESS )
+    if (CY_RSLT_SUCCESS != cy_mqtt_init())
     {
         printf("\n Initializing MQTT failed.\n");
         CY_ASSERT(0);
     }
 
     /* Initialize and start the OTA agent */
-    if( cy_ota_agent_start(&ota_network_params, &ota_agent_params, &ota_context) != CY_RSLT_SUCCESS )
+    if(CY_RSLT_SUCCESS != cy_ota_agent_start(&ota_network_params, &ota_agent_params, &ota_interfaces, &ota_context))
     {
         printf("\n Initializing and starting the OTA agent failed.\n");
         CY_ASSERT(0);
     }
 
-    /* To avoid compiler warnings */
-    (void)args;
-
-    /* task suspends itself and never returns */
     vTaskSuspend( NULL );
  }
 
@@ -227,14 +206,22 @@ cy_rslt_t connect_to_wifi_ap(void)
     cy_wcm_config_t wifi_config = { .interface = CY_WCM_INTERFACE_TYPE_STA};
     cy_wcm_connect_params_t wifi_conn_param;
     cy_wcm_ip_address_t ip_address;
-    cy_rslt_t result;
+    cy_rslt_t result = CY_RSLT_TYPE_ERROR;
 
     /* Variable to track the number of connection retries to the Wi-Fi AP specified
      * by WIFI_SSID macro. */
     uint32_t conn_retries = 0;
 
     /* Initialize Wi-Fi connection manager. */
-    cy_wcm_init(&wifi_config);
+    result = cy_wcm_init(&wifi_config);
+
+    if (CY_RSLT_SUCCESS != result)
+    {
+        printf("\n Initializing WCM failed.\n");
+        CY_ASSERT(0);
+    }
+
+    printf("\n Successfully initialized WCM.\n");
 
      /* Set the Wi-Fi SSID, password and security type. */
     memset(&wifi_conn_param, 0, sizeof(cy_wcm_connect_params_t));
@@ -247,7 +234,7 @@ cy_rslt_t connect_to_wifi_ap(void)
     {
         result = cy_wcm_connect_ap( &wifi_conn_param, &ip_address );
 
-        if (result == CY_RSLT_SUCCESS)
+        if (CY_RSLT_SUCCESS == result)
         {
             printf( "Successfully connected to Wi-Fi network '%s'.\n",
                     wifi_conn_param.ap_credentials.SSID);
@@ -361,8 +348,8 @@ cy_ota_callback_results_t ota_callback(cy_ota_cb_struct_t *cb_data)
 
                 case CY_OTA_STATE_JOB_PARSE:
                     printf("APP CB OTA PARSE JOB: '%.*s' \n",
-                            strlen(cb_data->json_doc),
-                            cb_data->json_doc);
+                    strlen(cb_data->json_doc),
+                    cb_data->json_doc);
                     break;
 
                 case CY_OTA_STATE_JOB_REDIRECT:
@@ -372,7 +359,7 @@ cy_ota_callback_results_t ota_callback(cy_ota_cb_struct_t *cb_data)
                 case CY_OTA_STATE_DATA_CONNECT:
                     printf("APP CB OTA CONNECT FOR DATA using ");
                     printf("MQTT: %s:%d \n", cb_data->broker_server.host_name,
-                            cb_data->broker_server.port);
+                    cb_data->broker_server.port);
                     break;
 
                 case CY_OTA_STATE_DATA_DOWNLOAD:
@@ -380,8 +367,7 @@ cy_ota_callback_results_t ota_callback(cy_ota_cb_struct_t *cb_data)
                     /* NOTE:
                      *  MQTT - json_doc holds the MQTT JSON request doc
                      */
-                    printf("MQTT: '%.*s' \n", strlen(cb_data->json_doc),
-                            cb_data->json_doc);
+                    printf("MQTT: '%.*s' \n", strlen(cb_data->json_doc), cb_data->json_doc);
                     printf("topic: '%s'\n\n", cb_data->unique_topic);
                     break;
 
@@ -454,5 +440,20 @@ cy_ota_callback_results_t ota_callback(cy_ota_cb_struct_t *cb_data)
 
     return cb_result;
 }
+
+
+/*******************************************************************************
+ * Function Name: ota_task_init
+ *******************************************************************************
+ * Summary:
+ *  Creates the OTA task.
+ *
+ *******************************************************************************/
+void ota_task_init(void)
+{
+    xTaskCreate(ota_task, "OTA TASK", OTA_TASK_STACK_SIZE, NULL,
+                OTA_TASK_PRIORITY, &ota_task_handle);
+}
+
 
 /* [] END OF FILE */

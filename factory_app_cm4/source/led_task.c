@@ -5,7 +5,7 @@
 *
 *
 *******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -100,7 +100,7 @@ static void led_task(void *args)
 
     /* Initialize the User LED */
     result = cyhal_gpio_init(CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT,
-                            CYHAL_GPIO_DRIVE_PULLUP, CYBSP_LED_STATE_OFF);
+                            CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
     CY_ASSERT(result == CY_RSLT_SUCCESS);
 
     /* To avoid compiler warning */

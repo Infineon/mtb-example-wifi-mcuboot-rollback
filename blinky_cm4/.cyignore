@@ -1,2 +1,10 @@
+# Documentation
+images
+
+# Exports, Project settings
+.mtbLaunchConfigs
+.settings
+.vscode
+
+# Below folder are not needed for this CE
 $(SEARCH_mcuboot)
-$(SEARCH_aws-iot-device-sdk-embedded-C)/libraries/standard/coreHTTP

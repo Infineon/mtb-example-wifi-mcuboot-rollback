@@ -43,7 +43,7 @@ ENTRY(Reset_Handler)
 /* The size of the stack section at the end of CM0+ SRAM */
 STACK_SIZE = 0x1000;
 
-/* Derive xip region size. */
+/* Derive XIP region size */
 XIP_REGION_SIZE = (0x0 + CY_EXT_FLASH_SIZE - CY_FACT_APP_SIZE);
 
 /* Force symbol to be entered in the output file as an undefined symbol. Doing
@@ -85,14 +85,14 @@ MEMORY
     em_eeprom         (rx)    : ORIGIN = 0x14000000, LENGTH = 0x8000       /*  32 KB */
 
     /* The following regions define device specific memory regions and must not be changed. */
-    sflash_user_data  (rx)    : ORIGIN = 0x16000800, LENGTH = 0x800                /* Supervisory flash: User data */
-    sflash_nar        (rx)    : ORIGIN = 0x16001A00, LENGTH = 0x200                /* Supervisory flash: Normal Access Restrictions (NAR) */
-    sflash_public_key (rx)    : ORIGIN = 0x16005A00, LENGTH = 0xC00                /* Supervisory flash: Public Key */
-    sflash_toc_2      (rx)    : ORIGIN = 0x16007C00, LENGTH = 0x200                /* Supervisory flash: Table of Content # 2 */
-    sflash_rtoc_2     (rx)    : ORIGIN = 0x16007E00, LENGTH = 0x200                /* Supervisory flash: Table of Content # 2 Copy */
-    fact_res          (rx)    : ORIGIN = 0x18000000, LENGTH = CY_FACT_APP_SIZE     /* first few sectors for factory-image */
-    xip               (rx)    : ORIGIN = (0x18000000 + CY_FACT_APP_SIZE), LENGTH = XIP_REGION_SIZE /* XIP region */
-    efuse             (r)     : ORIGIN = 0x90700000, LENGTH = 0x100000             /*   1 MB */
+    sflash_user_data  (rx)    : ORIGIN = 0x16000800, LENGTH = 0x800        /* Supervisory flash: User data */
+    sflash_nar        (rx)    : ORIGIN = 0x16001A00, LENGTH = 0x200        /* Supervisory flash: Normal Access Restrictions (NAR) */
+    sflash_public_key (rx)    : ORIGIN = 0x16005A00, LENGTH = 0xC00        /* Supervisory flash: Public Key */
+    sflash_toc_2      (rx)    : ORIGIN = 0x16007C00, LENGTH = 0x200        /* Supervisory flash: Table of Content # 2 */
+    sflash_rtoc_2     (rx)    : ORIGIN = 0x16007E00, LENGTH = 0x200        /* Supervisory flash: Table of Content # 2 Copy */
+    fact_res          (rx)    : ORIGIN = 0x18000000, LENGTH = CY_FACT_APP_SIZE  /* First few sectors for factory-image */
+    xip               (rx)    : ORIGIN = (0x18000000 + CY_FACT_APP_SIZE), LENGTH = XIP_REGION_SIZE  /* XIP region */
+    efuse             (r)     : ORIGIN = 0x90700000, LENGTH = 0x100000     /*   1 MB */
 }
 
 /* Library configurations */

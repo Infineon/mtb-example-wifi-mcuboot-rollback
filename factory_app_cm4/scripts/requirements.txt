@@ -1,5 +1,0 @@
-cryptography>=2.6
-intelhex
-click
-paho-mqtt
-cbor>=1.0.0

@@ -7,7 +7,7 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company)
+# Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,8 +23,8 @@
 # limitations under the License.
 ################################################################################
 
-# Include the application make files
-include ../common.mk
+# Include the user configuration makefile
+include ../user_config.mk
 
 ################################################################################
 # Basic Configuration
@@ -38,40 +38,115 @@ APPNAME=bootloader_cm0p
 # If set to "true" or "1", display full command-lines when building.
 VERBOSE=
 
+# Add additional defines to the build process (without a leading -D).
+DEFINES=
+
 ################################################################################
 # MCUboot Specific Configuration
-###############################################################################
-
-# Include the application make files 
-include ./shared_config.mk
-
-# Set this to 1, if you would like to add external memory programming
-# configurations to bootloader.
-EN_XMEM_PROG ?= 1
-
-CY_PYTHON_REQUIREMENT=true
-
-.PHONY: generate_flashmap_cm0p
+################################################################################
 
 # Python command to generate flashmap header file from flashmap JSON file
 ifneq ($(FLASH_MAP), )
-generate_flashmap_cm0p:
+.PHONY: FORCE
+memorymap.mk: FORCE
 	@echo -e "\n============================================================="
-	@echo -e "= Generating cy_flash_map.h and flashmap.mk ="
+	@echo -e "= Generating memorymap.h, memorymap.c and memorymap.mk ="
 	@echo -e "============================================================="
-	$(CY_PYTHON_PATH) ./scripts/flashmap.py -p $(PLATFORM) -i ./flashmap/$(FLASH_MAP) -o ./source/cy_flash_map.h > ./flashmap.mk
+	$(if $(SEARCH_core-make),$(CY_PYTHON_PATH),true) ../scripts/memorymap.py -p $(PLATFORM) -m -i ../flashmap/$(FLASH_MAP) -o ./source/memorymap.c -a ./source/memorymap.h > ./memorymap.mk.tmp
+	@if ! cmp -s "memorymap.mk.tmp" "memorymap.mk"; then \
+		mv -f "memorymap.mk.tmp" "memorymap.mk"; \
+	else \
+		rm -f "memorymap.mk.tmp"; \
+	fi
 	@echo -e "=============================================================\n"
-    
--include ./flashmap.mk
+
+-include memorymap.mk
+DEFINES+=CY_FLASH_MAP_JSON
 endif
 
-# factory_app size should be defined based on the external memory erase sector size
-# considering 0x40000 sector size, allocating 4 sectors (1MB) for the factory-image.
-ifeq ($(USE_EXTERNAL_FLASH), 1)
-FACT_APP_SIZE=0x200000
-else
-FACT_APP_SIZE=0x100000
+# Include the common library make file
+include ../common_libs.mk
+
+# Can be set at `MCUBOOT_LOG_LEVEL_DEBUG` to enable the verbose output of MCUBootApp.
+MCUBOOT_LOG_LEVEL=MCUBOOT_LOG_LEVEL_INFO
+USE_SHARED_SLOT=0
+FIH_PROFILE_LEVEL_LIST:=OFF LOW MEDIUM HIGH
+FIH_PROFILE_LEVEL?=MEDIUM
+
+# Check FIH profile param
+ifneq ($(filter $(FIH_PROFILE_LEVEL), $(FIH_PROFILE_LEVEL_LIST)),)
+ifneq ($(FIH_PROFILE_LEVEL), OFF)
+DEFINES+=MCUBOOT_FIH_PROFILE_ON
+DEFINES+=MCUBOOT_FIH_PROFILE_$(FIH_PROFILE_LEVEL)
 endif
+else
+$(error Wrong FIH_PROFILE_LEVEL param)
+endif
+
+# use USE_OVERWRITE = 1 for overwrite only mode
+# use USE_OVERWRITE = 0 for swap upgrade mode
+ifeq ($(USE_OVERWRITE), )
+USE_OVERWRITE?=$(PLATFORM_DEFAULT_USE_OVERWRITE)
+endif
+
+# 1. Add defines to enable image overwrite operation
+# 2. To enable downgrade prevention
+# 3. To enable bootstarp
+ifeq ($(USE_OVERWRITE), 1)
+DEFINES+=MCUBOOT_OVERWRITE_ONLY
+ifeq ($(USE_SW_DOWNGRADE_PREV), 1)
+DEFINES+=MCUBOOT_DOWNGRADE_PREVENTION
+endif
+else
+ifeq ($(USE_BOOTSTRAP), 1)
+DEFINES+=MCUBOOT_BOOTSTRAP
+endif
+endif
+
+# Add defines to enable usage of external flash for secondary or both images (XIP)
+# Defines to place secondary slot in external flash just after factory app image.
+ifeq ($(USE_EXTERNAL_FLASH), 1)
+ifeq ($(USE_XIP), 1)
+DEFINES+=USE_XIP
+endif
+DEFINES+=CY_BOOT_USE_EXTERNAL_FLASH
+DEFINES+=CY_MAX_EXT_FLASH_ERASE_SIZE=$(PLATFORM_CY_MAX_EXT_FLASH_ERASE_SIZE)
+endif
+
+# Below flag is automatically set/unset by memorymap.mk.
+ifeq ($(USE_HW_ROLLBACK_PROT), 1)
+DEFINES+=MCUBOOT_HW_ROLLBACK_PROT
+endif
+
+# Below flag is automatically set/unset by memorymap.mk.
+ifeq ($(USE_MEASURED_BOOT), 1)
+DEFINES+=MCUBOOT_MEASURED_BOOT
+DEFINES+=MAX_BOOT_RECORD_SZ=512
+DEFINES+=MCUBOOT_SHARED_DATA_BASE=0x08000800
+DEFINES+=MCUBOOT_SHARED_DATA_SIZE=0x200
+endif
+
+# Below flag is automatically set/unset by memorymap.mk.
+ifeq ($(USE_DATA_SHARING), 1)
+DEFINES+=MCUBOOT_DATA_SHARING
+DEFINES+=MAX_BOOT_RECORD_SZ=512
+DEFINES+=MCUBOOT_SHARED_DATA_BASE=0x08000800
+DEFINES+=MCUBOOT_SHARED_DATA_SIZE=0x200
+endif
+
+################################################################################
+# MBEDTLS Files
+################################################################################
+
+MBEDTLS_PATH=$(MCUBOOT_PATH)/ext/mbedtls
+
+SOURCES+=$(wildcard $(MBEDTLS_PATH)/library/*.c)
+
+INCLUDES+=\
+     $(MBEDTLS_PATH)/include\
+     $(MBEDTLS_PATH)/include/mbedtls\
+     $(MBEDTLS_PATH)/include/psa\
+     $(MBEDTLS_PATH)/library
 
 ################################################################################
 # Advanced Configuration
@@ -88,54 +163,51 @@ endif
 # added to the build
 #
 
-# Include the application make files 
-include ./app.mk
-
 # Do not define PSOC6HAL component as HAL is not supported for CM0+
 COMPONENTS=
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
-DISABLE_COMPONENTS=
+DISABLE_COMPONENTS=CM0P_SLEEP CM0P_SECURE CM0P_CRYPTO CM0P_BLESS
 
 # Set this application to run at the CM0+
-CORE=CM0P
-CORE_NAME=CM0P_0
+USER_APP_CORE=CM0P
+USER_APP_CORE_ID=0
 
-# Following define the flash map used by MCUBoot
-DEFINES+=\
-        CY_BOOT_BOOTLOADER_SIZE=$(BOOTLOADER_SIZE) \
-        CY_BOOT_PRIMARY_1_SIZE=$(MCUBOOT_SLOT_SIZE) \
-        CY_BOOT_SECONDARY_1_SIZE=$(MCUBOOT_SLOT_SIZE) \
-        CY_BOOT_SCRATCH_SIZE=$(MCUBOOT_SCRATCH_SIZE) \
-        CY_FACT_APP_SIZE=$(FACT_APP_SIZE)
+CORE=$(USER_APP_CORE)
+CORE_NAME=$(USER_APP_CORE)_$(USER_APP_CORE_ID)
 
-# Add additional defines to the build process (without a leading -D).
-DEFINES+=MBEDTLS_CONFIG_FILE='"mcuboot_crypto_config.h"' \
-         ECC256_KEY_FILE='"$(SIGN_KEY_FILE).pub"' \
-         MCUBOOT_IMAGE_NUMBER=$(MCUBOOT_IMAGE_NUMBER) \
-         MCUBOOT_MAX_IMG_SECTORS=$(MCUBOOT_MAX_IMG_SECTORS) \
-         MCUBOOT_LOG_LEVEL=MCUBOOT_LOG_LEVEL_INFO \
-         $(FAMILY) \
-         $(PLATFORM)
+SOURCES+=\
+    $(wildcard $(MCUBOOT_PATH)/boot/bootutil/src/*.c)\
+    $(MCUBOOTAPP_PATH)/keys.c
 
-# Add defines to enable image overwrite operation
-ifeq ($(USE_OVERWRITE), 1)
-DEFINES+=MCUBOOT_OVERWRITE_ONLY
-endif
-
-# Add defines to enable usage of external flash for secondary images
-# Defines to place Secondary slot in External Flash just 
-# after factory app image.
 ifeq ($(USE_EXTERNAL_FLASH), 1)
-DEFINES+=CY_BOOT_USE_EXTERNAL_FLASH=1
-DEFINES+=CY_MAX_EXT_FLASH_ERASE_SIZE=$(PLATFORM_CY_MAX_EXT_FLASH_ERASE_SIZE)
-DEFINES+=CY_BOOT_EXTERNAL_FLASH_SECONDARY_1_OFFSET=$(FACT_APP_SIZE)
+SOURCES+=\
+    $(MCUBOOTAPP_PATH)/cy_serial_flash_prog.c
 endif
 
-# Enable external memory programming support.
-ifeq ($(EN_XMEM_PROG), 1)
-DEFINES+=CY_ENABLE_EXMEM_PROGRAM=1
-endif
+INCLUDES+=\
+    $(MCUBOOT_PATH)/boot/bootutil/include/bootutil/crypto\
+    $(MCUBOOTAPP_PATH)/os
+
+# The following defines describe the flash map used by MCUBoot
+DEFINES+=CY_BOOT_BOOTLOADER_SIZE=$(BOOTLOADER_SIZE)\
+         MCUBOOT_LOG_LEVEL=$(MCUBOOT_LOG_LEVEL)\
+         CY_FACT_APP_SIZE=$(FACT_APP_SIZE)
+
+# The following defines used by MCUBoot
+DEFINES+=MBEDTLS_CONFIG_FILE='"mcuboot_crypto_config.h"'\
+         ECC256_KEY_FILE='"$(SIGN_KEY_FILE).pub"'\
+         MCUBOOT_IMAGE_NUMBER=$(MCUBOOT_IMAGE_NUMBER)\
+         USE_SHARED_SLOT=$(USE_SHARED_SLOT)\
+         MCUBOOT_PLATFORM_CHUNK_SIZE=$(PLATFORM_CHUNK_SIZE)\
+         MEMORY_ALIGN=$(PLATFORM_MEMORY_ALIGN)\
+         PLATFORM_MAX_TRAILER_PAGE_SIZE=$(PLATFORM_MAX_TRAILER_PAGE_SIZE)\
+         MCUBOOT_MAX_IMG_SECTORS=$(MAX_IMG_SECTORS)\
+         BOOT_$(CORE)\
+         APP_$(USER_APP_CORE)\
+         APP_CORE_ID=$(USER_APP_CORE_ID)\
+         $(PLATFORM)\
+         $(FAMILY)
 
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT=hardfp
@@ -159,43 +231,20 @@ CXXFLAGS=
 ASFLAGS=
 
 # Additional / custom linker flags.
-LDFLAGS=
+# Pass variables to linker script
+LDFLAGS+=-Wl,--defsym,CM0P_FLASH_SIZE=$(BOOTLOADER_SIZE)
+LDFLAGS+=-Wl,--defsym,CM0P_RAM_SIZE=$(BOOTLOADER_APP_RAM_SIZE)
+LDFLAGS+=-Wl,--defsym,CY_FACT_APP_SIZE=$(FACT_APP_SIZE)
+LDFLAGS+=-Wl,--defsym,CY_EXT_FLASH_SIZE=$(EXTERNAL_FLASH_SIZE)
 
 # Additional / custom libraries to link in to the application.
 LDLIBS=
 
-
 # Custom pre-build commands to run.
-# MCUboot uses submodules and "make getlibs" currently does not support
-# fetching submodules.
-# The PREBUILD command fetches the submodules only if the content of the 
-# "mcuboot/ext/mbedtls" directory is empty. 
-# 
-# See cy_serial_flash_prog.c file for details. 
-PREBUILD_VAR=+\
-@if [ -n "$$(ls -A $(MBEDTLS_PATH) 2>/dev/null)" ]; then\
-    echo "Git submodules for MCUboot exist. Skipping this step...";\
-    else\
-    echo "Initializing Git Submodules for MCUboot";\
-    cd libs/mcuboot;git submodule update --init --recursive;\
-fi;\
-$(MAKE) generate_flashmap_cm0p;\
-
-PREBUILD=$(PREBUILD_VAR)
+PREBUILD=
 
 # Custom post-build commands to run.
 POSTBUILD=
-
-# Toolchain specific linker flags
-ifeq ($(TOOLCHAIN), GCC_ARM)
-LDFLAGS+=-Wl,--defsym=CM0P_FLASH_SIZE=$(BOOTLOADER_SIZE)
-LDFLAGS+=-Wl,--defsym=CM0P_RAM_SIZE=$(BOOTLOADER_APP_RAM_SIZE)
-LDFLAGS+=-Wl,--defsym=CY_FACT_APP_SIZE=$(FACT_APP_SIZE)
-LDFLAGS+=-Wl,--defsym=CY_EXT_FLASH_SIZE=$(EXTERNAL_FLASH_SIZE)
-
-else
-$(error Only GCC_ARM is supported at this moment)
-endif
 
 ################################################################################
 # Paths
@@ -208,9 +257,9 @@ CY_APP_PATH=
 
 # Relative path to the shared repo location.
 #
-# All .mtb files have the format, <URI>#<COMMIT>#<LOCATION>. If the <LOCATION> field 
-# begins with $$ASSET_REPO$$, then the repo is deposited in the path specified by 
-# the CY_GETLIBS_SHARED_PATH variable. The default location is one directory level 
+# All .mtb files have the format, <URI>#<COMMIT>#<LOCATION>. If the <LOCATION> field
+# begins with $$ASSET_REPO$$, then the repo is deposited in the path specified by
+# the CY_GETLIBS_SHARED_PATH variable. The default location is one directory level
 # above the current app directory.
 # This is used with CY_GETLIBS_SHARED_NAME variable, which specifies the directory name.
 CY_GETLIBS_SHARED_PATH=../..
@@ -218,11 +267,5 @@ CY_GETLIBS_SHARED_PATH=../..
 # Directory name of the shared repo location.
 #
 CY_GETLIBS_SHARED_NAME=mtb_shared
-
-# Absolute path to the compiler's "bin" directory.
-#
-# The default depends on the selected TOOLCHAIN (GCC_ARM uses the ModusToolbox
-# IDE provided compiler by default).
-CY_COMPILER_PATH=
 
 include $(CY_TOOLS_DIR)/make/start.mk

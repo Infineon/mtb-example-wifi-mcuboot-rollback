@@ -1,6 +1,10 @@
-$(SEARCH_capsense)
+# Documentation
+images
+
+# Exports, Project settings
+.mtbLaunchConfigs
+.settings
+.vscode
+
+# Below folder are not needed for this CE
 $(SEARCH_mcuboot)
-$(SEARCH_psoc6cm0p)
-
-
-

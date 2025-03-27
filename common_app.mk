@@ -7,7 +7,7 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company)
+# Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,7 @@
 # Paths
 ################################################################################
 
-# Locate ModusToolbox IDE helper tools folders in default installation
+# Locate ModusToolbox software helper tools folders in default installation
 # locations for Windows, Linux, and macOS.
 CY_WIN_HOME=$(subst \,/,$(USERPROFILE))
 CY_TOOLS_PATHS ?= $(wildcard \
@@ -35,7 +35,15 @@ CY_TOOLS_PATHS ?= $(wildcard \
     $(HOME)/ModusToolbox/tools_* \
     /Applications/ModusToolbox/tools_*)
 
-# If you install ModusToolbox IDE in a custom location, add the path to its
+# Absolute path to the compiler's "bin" directory. The variable name depends on the 
+# toolchain used for the build. Refer to the ModusToolbox user guide to get the correct
+# variable name for the toolchain used in your build.
+# 
+# The default depends on the selected TOOLCHAIN (GCC_ARM uses the ModusToolbox
+# software provided compiler by default).
+CY_COMPILER_GCC_ARM_DIR=
+
+# If you install ModusToolbox software in a custom location, add the path to its
 # "tools_X.Y" folder (where X and Y are the version number of the tools
 # folder).
 CY_TOOLS_PATHS+=
